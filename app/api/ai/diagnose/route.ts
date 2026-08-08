@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentStaff } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/redis";
-import { suggestRepairDiagnosis } from "@/lib/gemini";
+import { suggestRepairDiagnosis } from "@/lib/grok";
 
 export async function POST(request: Request) {
   const staff = await getCurrentStaff();
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { success } = await checkRateLimit(`gemini:${staff.id}`, {
+  const { success } = await checkRateLimit(`ai:${staff.id}`, {
     limit: 10,
     windowSeconds: 60,
   });
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const suggestion = await suggestRepairDiagnosis(reportedIssue);
     return NextResponse.json({ suggestion });
   } catch {
-    // This is an assist, not a dependency — never let a Gemini outage block ticket work.
+    // This is an assist, not a dependency — never let an AI provider outage block ticket work.
     return NextResponse.json(
       { error: "AI suggestion is temporarily unavailable." },
       { status: 502 },

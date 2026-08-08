@@ -9,7 +9,7 @@ const redis =
       })
     : null;
 
-/** 5 attempts per minute per key — covers both login (key = email/IP) and the Gemini route (key = staff id). Fails open (allows the request) if Redis isn't configured, so local dev without Upstash still works. */
+/** 5 attempts per minute per key — covers both login (key = email/IP) and the AI diagnosis route (key = staff id). Fails open (allows the request) if Redis isn't configured, so local dev without Upstash still works. */
 export async function checkRateLimit(
   key: string,
   { limit = 5, windowSeconds = 60 }: { limit?: number; windowSeconds?: number } = {},

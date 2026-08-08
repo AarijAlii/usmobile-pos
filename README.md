@@ -6,14 +6,16 @@ Built for a take-home interview round. Scoped deliberately: the core POS loop (s
 
 ## Stack
 
-TypeScript · Next.js (App Router) · React · Supabase (Postgres + Auth + RLS) · Prisma · Express.js · Redis (Upstash) · Stripe · Gemini · Tailwind CSS + shadcn/ui · Docker · Vercel
+TypeScript · Next.js (App Router) · React · Supabase (Postgres + Auth + RLS) · Prisma · Express.js · Redis (Upstash) · Stripe · Grok (xAI) · Tailwind CSS + shadcn/ui · Docker · Vercel
+
+> The role's stack listed Gemini for the AI integration; this build uses Grok (xAI) instead, by request. The integration point (`lib/grok.ts`) is a single isolated function behind a REST call — swapping back to Gemini, or to any other provider, is a same-shaped change.
 
 ## How the job requirements map to this repo
 
 | Requirement | Where |
 |---|---|
 | Modern frontend with React/Next.js | `app/`, App Router, Server Components + Server Actions, Tailwind + shadcn/ui |
-| Secure backend APIs & business logic | Server Actions in each feature's `actions.ts`, `app/api/stripe/webhook`, `app/api/gemini/diagnose` |
+| Secure backend APIs & business logic | Server Actions in each feature's `actions.ts`, `app/api/stripe/webhook`, `app/api/ai/diagnose` |
 | PostgreSQL design via Supabase | [`prisma/schema.prisma`](prisma/schema.prisma) |
 | Auth, authorization, RLS | Supabase Auth (`lib/supabase/*`), [`prisma/rls_policies.sql`](prisma/rls_policies.sql) |
 | Build features from requirements | Inventory, POS checkout, trade-in, repair tickets, dashboard |
@@ -26,10 +28,10 @@ TypeScript · Next.js (App Router) · React · Supabase (Postgres + Auth + RLS) 
 Next.js (Vercel)                     Supabase                    External
 ┌─────────────────────────┐          ┌──────────────┐            ┌──────────┐
 │ App Router UI            │  RLS-    │ Postgres      │            │ Stripe   │
-│ Server Actions (CRUD)     │◄────────►│ + Auth        │            │ Gemini   │
+│ Server Actions (CRUD)     │◄────────►│ + Auth        │            │ Grok     │
 │ Route Handlers:          │  scoped  │ + RLS policies│            │ Upstash  │
 │  /api/stripe/webhook     │  client  └──────────────┘            └──────────┘
-│  /api/gemini/diagnose    │
+│  /api/ai/diagnose        │
 └─────────────────────────┘
             ▲
             │ (documented alternative topology — see below)
@@ -46,7 +48,7 @@ Next.js (Vercel)                     Supabase                    External
 
 **Express (`server/`)** demonstrates the Stripe webhook receiver as a standalone, Docker-deployable, always-on Node process — the shape it would take in a production topology with dedicated workers. For *this* deployed demo, Stripe's webhook is registered against the Next.js Route Handler instead (`app/api/stripe/webhook/route.ts`), so the live demo only depends on one deploy target. Run `server/` locally with the Stripe CLI to see the standalone version work (see below).
 
-**Redis (Upstash)** backs rate limiting on login and the Gemini route (`lib/redis.ts`) — a real, load-bearing use rather than a token integration. It fails open (allows the request) if unconfigured, so local dev without Upstash still works.
+**Redis (Upstash)** backs rate limiting on login and the AI diagnosis route (`lib/redis.ts`) — a real, load-bearing use rather than a token integration. It fails open (allows the request) if unconfigured, so local dev without Upstash still works.
 
 **Money** is stored and computed in integer cents everywhere (`lib/money.ts`), never floats — avoids rounding-error bugs in tax/total calculations.
 
@@ -63,7 +65,7 @@ Next.js (Vercel)                     Supabase                    External
    - **API**: copy the project URL, `anon` key, and `service_role` key.
    - **Database**: copy the pooled connection string (port 6543) and the direct connection string (port 5432).
 
-3. **Copy `.env.example` to `.env.local`** and fill in Supabase, Stripe (test mode), Gemini, and Upstash values.
+3. **Copy `.env.example` to `.env.local`** and fill in Supabase, Stripe (test mode), Grok (xAI), and Upstash values.
 
 4. **Apply the schema, RLS policies, and buy-back function** to your Supabase project:
    ```bash
@@ -131,7 +133,7 @@ Within the core POS scope, specific simplifications:
 - **Buy-back pricing is manual** (staff enters the offer), not an algorithm — matches how small phone stores actually price trade-ins today.
 - **Repair status is a flat list with a server-enforced transition guard**, not a drag-and-drop kanban board — the state machine correctness is the same either way, and the list view is less likely to break under time pressure.
 - **Customer notification is a manual "mark notified" timestamp**, not real SMS/email — avoids pulling in a messaging provider for a cosmetic requirement.
-- **One Gemini feature** (AI-assisted repair diagnosis notes from the customer's reported issue) rather than several — chosen because it's the clearest, lowest-risk value-add for a repair tech's actual workflow; it's also non-blocking by design (a Gemini outage never blocks ticket creation or advancement).
+- **One AI feature** (Grok-assisted repair diagnosis notes from the customer's reported issue) rather than several — chosen because it's the clearest, lowest-risk value-add for a repair tech's actual workflow; it's also non-blocking by design (an AI provider outage never blocks ticket creation or advancement).
 - **Cash payments and refunds are not implemented** — Stripe checkout is the only payment path in this build.
 
 ## What I'd do with more time

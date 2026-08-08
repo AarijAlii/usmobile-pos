@@ -225,7 +225,7 @@ function DiagnosisCard({
   async function handleSuggest() {
     setIsSuggesting(true);
     try {
-      const res = await fetch("/api/gemini/diagnose", {
+      const res = await fetch("/api/ai/diagnose", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reportedIssue }),
