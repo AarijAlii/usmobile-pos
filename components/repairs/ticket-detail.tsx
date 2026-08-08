@@ -130,11 +130,16 @@ export function TicketDetail({
           </CardContent>
         </Card>
 
-        <DiagnosisCard ticketId={ticket.id} initialNotes={ticket.diagnosisNotes} reportedIssue={ticket.reportedIssue} />
+        <DiagnosisCard
+          key={ticket.diagnosisNotes}
+          ticketId={ticket.id}
+          initialNotes={ticket.diagnosisNotes}
+          reportedIssue={ticket.reportedIssue}
+        />
 
         <PartsCard ticketId={ticket.id} partsUsed={partsUsed} availableParts={availableParts} />
 
-        <LaborCard ticketId={ticket.id} laborCents={ticket.laborCents} />
+        <LaborCard key={ticket.laborCents} ticketId={ticket.id} laborCents={ticket.laborCents} />
       </div>
 
       <div className="space-y-6">
@@ -304,11 +309,20 @@ function PartsCard({
               <Label className="text-xs text-muted-foreground">Part</Label>
               <Select value={productId} onValueChange={(v) => setProductId(v ?? "")} name="productId">
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a part" />
+                  <SelectValue placeholder="Select a part">
+                    {(value: string | null) => {
+                      const match = availableParts.find((p) => p.productId === value);
+                      return match ? `${match.name} (${match.maxQuantity} in stock)` : "Select a part";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {availableParts.map((p) => (
-                    <SelectItem key={p.productId} value={p.productId}>
+                    <SelectItem
+                      key={p.productId}
+                      value={p.productId}
+                      label={`${p.name} (${p.maxQuantity} in stock)`}
+                    >
                       {p.name} ({p.maxQuantity} in stock)
                     </SelectItem>
                   ))}

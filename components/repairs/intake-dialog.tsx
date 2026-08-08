@@ -94,11 +94,22 @@ export function IntakeDialog({ customers }: { customers: CustomerOption[] }) {
                 name="customerId"
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a customer" />
+                  <SelectValue placeholder="Select a customer">
+                    {(value: string | null) => {
+                      const match = customers.find((c) => c.id === value);
+                      return match
+                        ? match.fullName + (match.phone ? ` · ${match.phone}` : "")
+                        : "Select a customer";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem
+                      key={c.id}
+                      value={c.id}
+                      label={c.fullName + (c.phone ? ` · ${c.phone}` : "")}
+                    >
                       {c.fullName}
                       {c.phone ? ` · ${c.phone}` : ""}
                     </SelectItem>

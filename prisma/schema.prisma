@@ -76,7 +76,7 @@ enum StockMovementReason {
 // ---------------------------------------------------------------------------
 
 model Organization {
-  id        String   @id @default(uuid())
+  id        String   @id @default(dbgenerated("gen_random_uuid()"))
   name      String
   slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
@@ -93,7 +93,7 @@ model Organization {
 }
 
 model Store {
-  id             String   @id @default(uuid())
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
   organizationId String   @map("organization_id")
   name           String
   address        String?
@@ -141,7 +141,7 @@ model Staff {
 }
 
 model Customer {
-  id             String   @id @default(uuid())
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
   organizationId String   @map("organization_id")
   fullName       String   @map("full_name")
   email          String?
@@ -166,7 +166,7 @@ model Customer {
 /// Catalog template — one row per SKU, e.g. "iPhone 13 128GB Blue" or
 /// "Otterbox Defender Case — Black".
 model Product {
-  id                String       @id @default(uuid())
+  id                String       @id @default(dbgenerated("gen_random_uuid()"))
   organizationId    String       @map("organization_id")
   sku               String
   name              String
@@ -192,7 +192,7 @@ model Product {
 
 /// One row per physical serialized unit (phone) — IMEI/serial tracked.
 model InventoryUnit {
-  id                   String              @id @default(uuid())
+  id                   String              @id @default(dbgenerated("gen_random_uuid()"))
   organizationId       String              @map("organization_id")
   storeId              String              @map("store_id")
   productId            String              @map("product_id")
@@ -219,7 +219,7 @@ model InventoryUnit {
 
 /// Quantity counter per store for non-serialized products.
 model StockLevel {
-  id             String   @id @default(uuid())
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
   organizationId String   @map("organization_id")
   storeId        String   @map("store_id")
   productId      String   @map("product_id")
@@ -240,7 +240,7 @@ model StockLevel {
 // ---------------------------------------------------------------------------
 
 model Sale {
-  id                      String     @id @default(uuid())
+  id                      String     @id @default(dbgenerated("gen_random_uuid()"))
   organizationId          String     @map("organization_id")
   storeId                 String     @map("store_id")
   customerId              String?    @map("customer_id")
@@ -266,7 +266,7 @@ model Sale {
 }
 
 model SaleLineItem {
-  id              String  @id @default(uuid())
+  id              String  @id @default(dbgenerated("gen_random_uuid()"))
   saleId          String  @map("sale_id")
   productId       String  @map("product_id")
   inventoryUnitId String? @unique @map("inventory_unit_id") // set when the line item is a serialized phone
@@ -287,7 +287,7 @@ model SaleLineItem {
 // ---------------------------------------------------------------------------
 
 model BuybackTransaction {
-  id                String        @id @default(uuid())
+  id                String        @id @default(dbgenerated("gen_random_uuid()"))
   organizationId    String        @map("organization_id")
   storeId           String        @map("store_id")
   customerId        String?       @map("customer_id")
@@ -315,7 +315,7 @@ model BuybackTransaction {
 // ---------------------------------------------------------------------------
 
 model RepairTicket {
-  id                 String       @id @default(uuid())
+  id                 String       @id @default(dbgenerated("gen_random_uuid()"))
   organizationId     String       @map("organization_id")
   storeId            String       @map("store_id")
   customerId         String?      @map("customer_id")
@@ -343,7 +343,7 @@ model RepairTicket {
 }
 
 model RepairPartUsed {
-  id             String @id @default(uuid())
+  id             String @id @default(dbgenerated("gen_random_uuid()"))
   repairTicketId String @map("repair_ticket_id")
   productId      String @map("product_id") // must reference a Product with isPart = true
   quantity       Int    @default(1)
@@ -364,7 +364,7 @@ model RepairPartUsed {
 /// Append-only log of every inventory-affecting event (sale, buy-back intake,
 /// repair part consumption, manual adjustment).
 model StockMovement {
-  id              String              @id @default(uuid())
+  id              String              @id @default(dbgenerated("gen_random_uuid()"))
   organizationId  String              @map("organization_id")
   storeId         String              @map("store_id")
   productId       String?             @map("product_id")

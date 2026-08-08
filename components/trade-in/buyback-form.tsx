@@ -19,6 +19,11 @@ import type { CustomerOption } from "@/components/pos/pos-terminal";
 
 const initialState: ActionState = {};
 
+const PAYOUT_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  store_credit: "Store credit",
+};
+
 export function BuybackForm({ customers }: { customers: CustomerOption[] }) {
   const [customerId, setCustomerId] = useState("");
   const [isNewCustomer, setIsNewCustomer] = useState(true);
@@ -83,11 +88,13 @@ export function BuybackForm({ customers }: { customers: CustomerOption[] }) {
               <Label>Payout method</Label>
               <Select name="payoutMethod" defaultValue="cash">
                 <SelectTrigger className="w-full">
-                  <SelectValue />
+                  <SelectValue>
+                    {(value: string) => PAYOUT_METHOD_LABELS[value] ?? value}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="store_credit">Store credit</SelectItem>
+                  <SelectItem value="cash" label="Cash">Cash</SelectItem>
+                  <SelectItem value="store_credit" label="Store credit">Store credit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -107,11 +114,22 @@ export function BuybackForm({ customers }: { customers: CustomerOption[] }) {
                 name="customerId"
               >
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a customer" />
+                  <SelectValue placeholder="Select a customer">
+                    {(value: string | null) => {
+                      const match = customers.find((c) => c.id === value);
+                      return match
+                        ? match.fullName + (match.phone ? ` · ${match.phone}` : "")
+                        : "Select a customer";
+                    }}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+                    <SelectItem
+                      key={c.id}
+                      value={c.id}
+                      label={c.fullName + (c.phone ? ` · ${c.phone}` : "")}
+                    >
                       {c.fullName}
                       {c.phone ? ` · ${c.phone}` : ""}
                     </SelectItem>

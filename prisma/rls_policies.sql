@@ -19,13 +19,13 @@
 -- ---------------------------------------------------------------------------
 
 create or replace function public.current_staff_org_id()
-returns uuid
+returns text
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select organization_id from public.staff where id = auth.uid()
+  select organization_id from public.staff where id = auth.uid()::text
 $$;
 
 create or replace function public.current_staff_role()
@@ -35,21 +35,21 @@ stable
 security definer
 set search_path = public
 as $$
-  select role::text from public.staff where id = auth.uid()
+  select role::text from public.staff where id = auth.uid()::text
 $$;
 
 create or replace function public.current_staff_store_id()
-returns uuid
+returns text
 language sql
 stable
 security definer
 set search_path = public
 as $$
-  select store_id from public.staff where id = auth.uid()
+  select store_id from public.staff where id = auth.uid()::text
 $$;
 
 -- OWNER/ADMIN can access every store in their org; STAFF only their assigned store.
-create or replace function public.can_access_store(target_store_id uuid)
+create or replace function public.can_access_store(target_store_id text)
 returns boolean
 language sql
 stable
@@ -66,7 +66,7 @@ $$;
 grant execute on function public.current_staff_org_id() to authenticated;
 grant execute on function public.current_staff_role() to authenticated;
 grant execute on function public.current_staff_store_id() to authenticated;
-grant execute on function public.can_access_store(uuid) to authenticated;
+grant execute on function public.can_access_store(text) to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- organizations

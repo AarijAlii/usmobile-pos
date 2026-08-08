@@ -16,24 +16,24 @@
 -- not a bypass; it's atomicity without weakening RLS.
 
 create or replace function public.create_buyback_with_inventory(
-  p_organization_id uuid,
-  p_store_id uuid,
-  p_customer_id uuid,
-  p_created_by_id uuid,
-  p_product_id uuid,
+  p_organization_id text,
+  p_store_id text,
+  p_customer_id text,
+  p_created_by_id text,
+  p_product_id text,
   p_device_description text,
   p_imei text,
   p_condition_notes text,
   p_offer_price_cents int,
   p_payout_method text
 )
-returns table (buyback_id uuid, inventory_unit_id uuid)
+returns table (buyback_id text, inventory_unit_id text)
 language plpgsql
 security invoker
 as $$
 declare
-  v_buyback_id uuid;
-  v_unit_id uuid;
+  v_buyback_id text;
+  v_unit_id text;
 begin
   insert into public.buyback_transactions (
     organization_id, store_id, customer_id, created_by_id,
@@ -66,5 +66,5 @@ end;
 $$;
 
 grant execute on function public.create_buyback_with_inventory(
-  uuid, uuid, uuid, uuid, uuid, text, text, text, int, text
+  text, text, text, text, text, text, text, text, int, text
 ) to authenticated;

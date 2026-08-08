@@ -232,11 +232,22 @@ export function PosTerminal({
               <div className="flex gap-2">
                 <Select value={customerId} onValueChange={(value) => setCustomerId(value ?? "")}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Walk-in customer" />
+                    <SelectValue placeholder="Walk-in customer">
+                      {(value: string | null) => {
+                        const match = customers.find((c) => c.id === value);
+                        return match
+                          ? match.fullName + (match.phone ? ` · ${match.phone}` : "")
+                          : "Walk-in customer";
+                      }}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                        label={c.fullName + (c.phone ? ` · ${c.phone}` : "")}
+                      >
                         {c.fullName}
                         {c.phone ? ` · ${c.phone}` : ""}
                       </SelectItem>

@@ -25,6 +25,14 @@ import { createInventoryItem, type ActionState } from "@/app/(app)/inventory/act
 
 const initialState: ActionState = {};
 
+const CONDITION_LABELS: Record<string, string> = {
+  new: "New",
+  excellent: "Excellent",
+  good: "Good",
+  fair: "Fair",
+  poor: "Poor",
+};
+
 export function ItemFormDialog() {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<"DEVICE" | "ACCESSORY">("DEVICE");
@@ -91,14 +99,16 @@ export function ItemFormDialog() {
                   <Label>Condition</Label>
                   <Select name="condition" defaultValue="excellent">
                     <SelectTrigger className="w-full">
-                      <SelectValue />
+                      <SelectValue>
+                        {(value: string) => CONDITION_LABELS[value] ?? value}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="new">New</SelectItem>
-                      <SelectItem value="excellent">Excellent</SelectItem>
-                      <SelectItem value="good">Good</SelectItem>
-                      <SelectItem value="fair">Fair</SelectItem>
-                      <SelectItem value="poor">Poor</SelectItem>
+                      <SelectItem value="new" label="New">New</SelectItem>
+                      <SelectItem value="excellent" label="Excellent">Excellent</SelectItem>
+                      <SelectItem value="good" label="Good">Good</SelectItem>
+                      <SelectItem value="fair" label="Fair">Fair</SelectItem>
+                      <SelectItem value="poor" label="Poor">Poor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
