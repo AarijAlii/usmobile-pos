@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentStaff } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/redis";
-import { suggestRepairDiagnosis } from "@/lib/grok";
+import { suggestRepairDiagnosis } from "@/lib/groq";
 
 export async function POST(request: Request) {
   const staff = await getCurrentStaff();
@@ -25,8 +25,10 @@ export async function POST(request: Request) {
   try {
     const suggestion = await suggestRepairDiagnosis(reportedIssue);
     return NextResponse.json({ suggestion });
-  } catch {
-    // This is an assist, not a dependency — never let an AI provider outage block ticket work.
+  } catch (err) {
+    // This is an assist, not a dependency — never let an AI provider outage block ticket
+    // work, but still log server-side so a real outage/misconfiguration is diagnosable.
+    console.error("AI diagnosis suggestion failed:", err);
     return NextResponse.json(
       { error: "AI suggestion is temporarily unavailable." },
       { status: 502 },
