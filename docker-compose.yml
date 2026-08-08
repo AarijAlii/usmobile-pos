@@ -1,0 +1,19 @@
+# Local dev / self-hosting only. The deployed demo runs the Next.js app on
+# Vercel with Supabase (Postgres) and Upstash (Redis) hosted separately —
+# this compose file exists to run the standalone Express webhook service
+# (server/) with parity to how it would run in a container-based production
+# topology. See README.md "Architecture" for the tradeoff.
+
+services:
+  webhook-service:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}

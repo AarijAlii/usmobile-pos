@@ -1,0 +1,385 @@
+// USMobile POS — Prisma schema
+//
+// Runtime note: this schema is used for migrations, type generation, and the
+// seed script only. Authenticated request-time reads/writes go through the
+// Supabase server client (carrying the user's JWT) so Postgres RLS is
+// actually enforced — see lib/supabase/server.ts and
+// prisma/migrations/*_rls_policies/migration.sql. Prisma Client connects with
+// a privileged connection that bypasses RLS, so it is never used to serve an
+// authenticated user request directly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (pgbouncer, port 6543) — migrations/seed only in this project
+  directUrl = env("DIRECT_URL") // direct (port 5432) — required by Prisma Migrate
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum StaffRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum TrackingType {
+  SERIALIZED // phones — one row per unit, tracked by IMEI/serial
+  QUANTITY // accessories/parts — tracked by a per-store count
+}
+
+enum InventoryUnitStatus {
+  IN_STOCK
+  RESERVED
+  SOLD
+  DEFECTIVE
+}
+
+enum SaleStatus {
+  DRAFT
+  AWAITING_PAYMENT
+  PAID
+  CANCELLED
+  REFUNDED
+}
+
+enum BuybackStatus {
+  COMPLETED
+  CANCELLED
+}
+
+enum RepairStatus {
+  INTAKE
+  DIAGNOSING
+  IN_REPAIR
+  READY_FOR_PICKUP
+  COMPLETED
+  CANCELLED
+}
+
+enum StockMovementReason {
+  SALE
+  SALE_VOID_RESTOCK
+  BUYBACK_INTAKE
+  REPAIR_PART_CONSUMED
+  MANUAL_ADJUSTMENT
+  INITIAL_STOCK
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stores         Store[]
+  staff          Staff[]
+  customers      Customer[]
+  products       Product[]
+  inventoryUnits InventoryUnit[]
+  sales          Sale[]
+
+  @@map("organizations")
+}
+
+model Store {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  name           String
+  address        String?
+  timezone       String   @default("America/New_York")
+  taxRateBps     Int      @default(0) @map("tax_rate_bps") // basis points, e.g. 725 = 7.25%
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  staff          Staff[]
+  inventoryUnits InventoryUnit[]
+  stockLevels    StockLevel[]
+  sales          Sale[]
+  buybacks       BuybackTransaction[]
+  repairTickets  RepairTicket[]
+  stockMovements StockMovement[]
+
+  @@index([organizationId])
+  @@map("stores")
+}
+
+/// Mirrors auth.users 1:1 — id is set equal to the Supabase Auth user's id at
+/// invite time (no cross-schema FK; enforced in the invite code path).
+model Staff {
+  id             String    @id
+  organizationId String    @map("organization_id")
+  storeId        String?   @map("store_id") // null = access to all stores in org (typically OWNER/ADMIN)
+  email          String    @unique
+  fullName       String    @map("full_name")
+  role           StaffRole @default(STAFF)
+  isActive       Boolean   @default(true) @map("is_active")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store           Store?               @relation(fields: [storeId], references: [id])
+  salesCreated    Sale[]               @relation("SaleCreatedBy")
+  buybacksCreated BuybackTransaction[] @relation("BuybackCreatedBy")
+  repairsAssigned RepairTicket[]       @relation("RepairAssignedTo")
+  stockMovements  StockMovement[]
+
+  @@index([organizationId])
+  @@index([storeId])
+  @@map("staff")
+}
+
+model Customer {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  fullName       String   @map("full_name")
+  email          String?
+  phone          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sales         Sale[]
+  buybacks      BuybackTransaction[]
+  repairTickets RepairTicket[]
+
+  @@index([organizationId])
+  @@index([organizationId, phone])
+  @@map("customers")
+}
+
+// ---------------------------------------------------------------------------
+// Catalog & inventory
+// ---------------------------------------------------------------------------
+
+/// Catalog template — one row per SKU, e.g. "iPhone 13 128GB Blue" or
+/// "Otterbox Defender Case — Black".
+model Product {
+  id                String       @id @default(uuid())
+  organizationId    String       @map("organization_id")
+  sku               String
+  name              String
+  category          String // "phone" | "accessory" | "part" — plain string for velocity
+  trackingType      TrackingType @map("tracking_type")
+  brand             String?
+  model             String?
+  defaultPriceCents Int          @map("default_price_cents")
+  isPart            Boolean      @default(false) @map("is_part") // usable as a repair part
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inventoryUnits  InventoryUnit[]
+  stockLevels     StockLevel[]
+  saleLineItems   SaleLineItem[]
+  repairPartsUsed RepairPartUsed[]
+
+  @@unique([organizationId, sku])
+  @@index([organizationId])
+  @@map("products")
+}
+
+/// One row per physical serialized unit (phone) — IMEI/serial tracked.
+model InventoryUnit {
+  id                   String              @id @default(uuid())
+  organizationId       String              @map("organization_id")
+  storeId              String              @map("store_id")
+  productId            String              @map("product_id")
+  imei                 String?             @unique
+  serialNumber         String?
+  status               InventoryUnitStatus @default(IN_STOCK)
+  condition            String?
+  costCents            Int?                @map("cost_cents")
+  askingPriceCents     Int?                @map("asking_price_cents")
+  acquiredViaBuybackId String?             @unique @map("acquired_via_buyback_id")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store         Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product       Product             @relation(fields: [productId], references: [id])
+  buybackSource BuybackTransaction? @relation(fields: [acquiredViaBuybackId], references: [id])
+  saleLineItem  SaleLineItem?
+
+  @@index([organizationId, storeId])
+  @@index([storeId, status])
+  @@map("inventory_units")
+}
+
+/// Quantity counter per store for non-serialized products.
+model StockLevel {
+  id             String   @id @default(uuid())
+  organizationId String   @map("organization_id")
+  storeId        String   @map("store_id")
+  productId      String   @map("product_id")
+  quantityOnHand Int      @default(0) @map("quantity_on_hand")
+  reorderLevel   Int      @default(0) @map("reorder_level")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, productId])
+  @@index([organizationId])
+  @@map("stock_levels")
+}
+
+// ---------------------------------------------------------------------------
+// Sales (POS checkout)
+// ---------------------------------------------------------------------------
+
+model Sale {
+  id                      String     @id @default(uuid())
+  organizationId          String     @map("organization_id")
+  storeId                 String     @map("store_id")
+  customerId              String?    @map("customer_id")
+  createdById             String     @map("created_by_id")
+  status                  SaleStatus @default(DRAFT)
+  subtotalCents           Int        @default(0) @map("subtotal_cents")
+  taxCents                Int        @default(0) @map("tax_cents")
+  totalCents              Int        @default(0) @map("total_cents")
+  stripeCheckoutSessionId String?    @unique @map("stripe_checkout_session_id")
+  stripePaymentIntentId   String?    @unique @map("stripe_payment_intent_id")
+  createdAt               DateTime   @default(now()) @map("created_at")
+  updatedAt               DateTime   @updatedAt @map("updated_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer     Customer?      @relation(fields: [customerId], references: [id])
+  createdBy    Staff          @relation("SaleCreatedBy", fields: [createdById], references: [id])
+  lineItems    SaleLineItem[]
+
+  @@index([organizationId, storeId])
+  @@index([storeId, status])
+  @@map("sales")
+}
+
+model SaleLineItem {
+  id              String  @id @default(uuid())
+  saleId          String  @map("sale_id")
+  productId       String  @map("product_id")
+  inventoryUnitId String? @unique @map("inventory_unit_id") // set when the line item is a serialized phone
+  quantity        Int     @default(1) // always 1 for serialized items
+  unitPriceCents  Int     @map("unit_price_cents")
+  lineTotalCents  Int     @map("line_total_cents")
+
+  sale          Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product       Product        @relation(fields: [productId], references: [id])
+  inventoryUnit InventoryUnit? @relation(fields: [inventoryUnitId], references: [id])
+
+  @@index([saleId])
+  @@map("sale_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Buy-back / trade-in
+// ---------------------------------------------------------------------------
+
+model BuybackTransaction {
+  id                String        @id @default(uuid())
+  organizationId    String        @map("organization_id")
+  storeId           String        @map("store_id")
+  customerId        String?       @map("customer_id")
+  createdById       String        @map("created_by_id")
+  deviceDescription String        @map("device_description")
+  imei              String?
+  conditionNotes    String?       @map("condition_notes")
+  offerPriceCents   Int           @map("offer_price_cents")
+  payoutMethod      String        @default("cash") @map("payout_method") // "cash" | "store_credit" — label only
+  status            BuybackStatus @default(COMPLETED)
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  createdBy     Staff          @relation("BuybackCreatedBy", fields: [createdById], references: [id])
+  resultingUnit InventoryUnit?
+
+  @@index([organizationId, storeId])
+  @@map("buyback_transactions")
+}
+
+// ---------------------------------------------------------------------------
+// Repair tickets
+// ---------------------------------------------------------------------------
+
+model RepairTicket {
+  id                 String       @id @default(uuid())
+  organizationId     String       @map("organization_id")
+  storeId            String       @map("store_id")
+  customerId         String?      @map("customer_id")
+  assignedToId       String?      @map("assigned_to_id")
+  deviceDescription  String       @map("device_description") // customer's own device — free text, not store inventory
+  imei               String?
+  reportedIssue      String       @map("reported_issue")
+  diagnosisNotes     String?      @map("diagnosis_notes")
+  status             RepairStatus @default(INTAKE)
+  laborCents         Int          @default(0) @map("labor_cents")
+  partsTotalCents    Int          @default(0) @map("parts_total_cents")
+  totalCents         Int          @default(0) @map("total_cents")
+  customerNotifiedAt DateTime?    @map("customer_notified_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer   Customer?        @relation(fields: [customerId], references: [id])
+  assignedTo Staff?           @relation("RepairAssignedTo", fields: [assignedToId], references: [id])
+  partsUsed  RepairPartUsed[]
+
+  @@index([organizationId, storeId])
+  @@index([storeId, status])
+  @@map("repair_tickets")
+}
+
+model RepairPartUsed {
+  id             String @id @default(uuid())
+  repairTicketId String @map("repair_ticket_id")
+  productId      String @map("product_id") // must reference a Product with isPart = true
+  quantity       Int    @default(1)
+  unitCostCents  Int    @map("unit_cost_cents")
+  lineTotalCents Int    @map("line_total_cents")
+
+  repairTicket RepairTicket @relation(fields: [repairTicketId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id])
+
+  @@index([repairTicketId])
+  @@map("repair_parts_used")
+}
+
+// ---------------------------------------------------------------------------
+// Audit trail
+// ---------------------------------------------------------------------------
+
+/// Append-only log of every inventory-affecting event (sale, buy-back intake,
+/// repair part consumption, manual adjustment).
+model StockMovement {
+  id              String              @id @default(uuid())
+  organizationId  String              @map("organization_id")
+  storeId         String              @map("store_id")
+  productId       String?             @map("product_id")
+  inventoryUnitId String?             @map("inventory_unit_id")
+  reason          StockMovementReason
+  quantityDelta   Int                 @map("quantity_delta") // +1/-1 for serialized units, +/-N for quantity items
+  referenceType   String?             @map("reference_type") // "sale" | "buyback" | "repair_ticket" | "manual"
+  referenceId     String?             @map("reference_id")
+  performedById   String?             @map("performed_by_id")
+  createdAt       DateTime            @default(now()) @map("created_at")
+
+  store Store  @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  staff Staff? @relation(fields: [performedById], references: [id])
+
+  @@index([organizationId, storeId])
+  @@index([referenceType, referenceId])
+  @@map("stock_movements")
+}

@@ -1,0 +1,22 @@
+{
+  "name": "usmobile-pos-webhook-service",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Standalone Express service demonstrating the Stripe webhook receiver as an always-on Node process, separate from the Vercel-hosted Next.js app.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.109.0",
+    "express": "^4.21.2",
+    "stripe": "^22.4.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20",
+    "tsx": "^4.23.11",
+    "typescript": "^5"
+  }
+}
