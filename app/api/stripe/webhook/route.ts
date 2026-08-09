@@ -7,7 +7,11 @@ import { createServiceRoleClient } from "@/lib/supabase/server";
  * No end-user session exists for a Stripe-initiated request, so this is one
  * of the two justified uses of the service-role client (see
  * lib/supabase/server.ts). Every write below is scoped explicitly by saleId
- * in application code since RLS is bypassed here by design.
+ * or layawayId in application code since RLS is bypassed here by design. The
+ * regular-sale path delegates to finalize_sale_payment() (see
+ * prisma/sale_fulfillment_function.sql) so the exact same fulfillment logic
+ * runs whether payment completes via Stripe (here) or via store credit
+ * alone (app/(app)/pos/actions.ts, when credit fully covers the total).
  */
 export async function POST(request: NextRequest) {
   const signature = request.headers.get("stripe-signature");
@@ -49,62 +53,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   const supabase = createServiceRoleClient();
 
-  const { data: sale } = await supabase
-    .from("sales")
-    .select("id, status, organization_id, store_id")
-    .eq("id", saleId)
-    .single();
+  // finalize_sale_payment() is itself idempotent (no-op unless the sale is
+  // still AWAITING_PAYMENT), which is what actually protects against Stripe
+  // redelivering this event — no separate pre-check needed here.
+  const { error } = await supabase.rpc("finalize_sale_payment", {
+    p_sale_id: saleId,
+    p_stripe_payment_intent_id:
+      typeof session.payment_intent === "string" ? session.payment_intent : null,
+  });
 
-  // Stripe may deliver the same event more than once — skip if already processed.
-  if (!sale || sale.status === "PAID") return;
-
-  const { data: lineItems } = await supabase
-    .from("sale_line_items")
-    .select("id, product_id, inventory_unit_id, quantity")
-    .eq("sale_id", saleId);
-
-  for (const item of lineItems ?? []) {
-    if (item.inventory_unit_id) {
-      await supabase
-        .from("inventory_units")
-        .update({ status: "SOLD" })
-        .eq("id", item.inventory_unit_id);
-    } else {
-      const { data: level } = await supabase
-        .from("stock_levels")
-        .select("id, quantity_on_hand")
-        .eq("store_id", sale.store_id)
-        .eq("product_id", item.product_id)
-        .single();
-
-      if (level) {
-        await supabase
-          .from("stock_levels")
-          .update({ quantity_on_hand: Math.max(0, level.quantity_on_hand - item.quantity) })
-          .eq("id", level.id);
-      }
-    }
-
-    await supabase.from("stock_movements").insert({
-      organization_id: sale.organization_id,
-      store_id: sale.store_id,
-      product_id: item.product_id,
-      inventory_unit_id: item.inventory_unit_id,
-      reason: "SALE",
-      quantity_delta: -item.quantity,
-      reference_type: "sale",
-      reference_id: saleId,
-    });
+  if (error) {
+    console.error(`finalize_sale_payment failed for sale ${saleId}:`, error.message);
   }
-
-  await supabase
-    .from("sales")
-    .update({
-      status: "PAID",
-      stripe_payment_intent_id:
-        typeof session.payment_intent === "string" ? session.payment_intent : null,
-    })
-    .eq("id", saleId);
 }
 
 async function handleLayawayPaymentCompleted(session: Stripe.Checkout.Session) {

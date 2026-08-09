@@ -9,7 +9,7 @@ export default async function InventoryPage() {
   const storeId = await getActiveStoreId(staff);
   const supabase = await createClient();
 
-  const [units, levels] = await Promise.all([
+  const [units, levels, services] = await Promise.all([
     supabase
       .from("inventory_units")
       .select("id, imei, condition, status, asking_price_cents, product:products(id, sku, name, brand, model)")
@@ -20,6 +20,12 @@ export default async function InventoryPage() {
       .select("id, quantity_on_hand, reorder_level, product:products(id, sku, name, brand, model, default_price_cents)")
       .eq("store_id", storeId)
       .order("updated_at", { ascending: false }),
+    supabase
+      .from("products")
+      .select("id, sku, name, default_price_cents")
+      .eq("organization_id", staff.organizationId)
+      .eq("tracking_type", "SERVICE")
+      .order("name", { ascending: true }),
   ]);
 
   const rows: InventoryRow[] = [
@@ -55,6 +61,17 @@ export default async function InventoryPage() {
         quantity: l.quantity_on_hand,
       };
     }),
+    ...(services.data ?? []).map((s): InventoryRow => ({
+      kind: "SERVICE",
+      id: s.id,
+      productId: s.id,
+      sku: s.sku,
+      name: s.name,
+      detail: "No stock to track",
+      priceCents: s.default_price_cents,
+      status: "UNLIMITED",
+      quantity: null,
+    })),
   ];
 
   return (

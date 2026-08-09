@@ -141,6 +141,17 @@ async function main() {
   });
 
   // --- Customers (org A) ---------------------------------------------------
+  // No unique constraint on (organizationId, fullName) to upsert against, so
+  // find-or-create explicitly — a plain .create() here would insert a fresh
+  // duplicate customer (and everything seeded against it) on every re-run.
+  async function findOrCreateCustomer(input: { fullName: string; phone: string }) {
+    const existing = await prisma.customer.findFirst({
+      where: { organizationId: orgA.id, fullName: input.fullName },
+    });
+    if (existing) return existing;
+    return prisma.customer.create({ data: { organizationId: orgA.id, ...input } });
+  }
+
   const [jordan, maria, kevin, aisha, tom] = await Promise.all(
     [
       { fullName: "Jordan Blake", phone: "512-555-0101" },
@@ -148,14 +159,12 @@ async function main() {
       { fullName: "Kevin Chen", phone: "512-555-0177" },
       { fullName: "Aisha Williams", phone: "512-555-0198" },
       { fullName: "Tom Becker", phone: "512-555-0133" },
-    ].map((c) =>
-      prisma.customer.create({ data: { organizationId: orgA.id, ...c } }),
-    ),
+    ].map(findOrCreateCustomer),
   );
 
   // --- Product catalog (org A) ---------------------------------------------
   async function upsertProduct(input: {
-    sku: string; name: string; category: string; trackingType: "SERIALIZED" | "QUANTITY";
+    sku: string; name: string; category: string; trackingType: "SERIALIZED" | "QUANTITY" | "SERVICE";
     brand?: string; model?: string; priceCents: number; isPart?: boolean;
   }) {
     return prisma.product.upsert({
@@ -191,6 +200,29 @@ async function main() {
   const iphoneBattery = await upsertProduct({ sku: "PART-BATT-IP", name: "iPhone Replacement Battery", category: "part", trackingType: "QUANTITY", priceCents: centsFor(29), isPart: true });
   const iphoneScreen = await upsertProduct({ sku: "PART-SCRN-IP", name: "iPhone Screen Assembly (Generic)", category: "part", trackingType: "QUANTITY", priceCents: centsFor(59), isPart: true });
   const samsungPort = await upsertProduct({ sku: "PART-PORT-SGS", name: "Samsung Charging Port Flex Cable", category: "part", trackingType: "QUANTITY", priceCents: centsFor(15), isPart: true });
+
+  await upsertProduct({ sku: "SVC-WARR-90D", name: "90-Day Protection Plan", category: "warranty", trackingType: "SERVICE", priceCents: centsFor(19) });
+  await upsertProduct({ sku: "SVC-WARR-1YR", name: "1-Year Protection Plan", category: "warranty", trackingType: "SERVICE", priceCents: centsFor(49) });
+
+  // --- Bundles ---------------------------------------------------------------
+  const existingBundle = await prisma.bundle.findFirst({
+    where: { organizationId: orgA.id, name: "Screen Protection Bundle" },
+  });
+  if (!existingBundle) {
+    await prisma.bundle.create({
+      data: {
+        organizationId: orgA.id,
+        name: "Screen Protection Bundle",
+        priceCents: centsFor(42), // case ($39) + screen protector ($9) = $48 individually
+        items: {
+          create: [
+            { productId: otterboxCase.id, quantity: 1 },
+            { productId: screenProtector.id, quantity: 1 },
+          ],
+        },
+      },
+    });
+  }
 
   // --- Inventory units (serialized devices) --------------------------------
   async function upsertUnit(productId: string, imei: string, condition: string, priceCents: number, costCents?: number) {

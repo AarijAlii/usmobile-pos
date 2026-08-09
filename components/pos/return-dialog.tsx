@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatCents } from "@/lib/money";
 import { calcReturnTotals } from "@/lib/returns";
-import { createReturn } from "@/app/(app)/pos/receipt/[saleId]/actions";
+import { createReturn, type RefundMethod } from "@/app/(app)/pos/receipt/[saleId]/actions";
 
 export interface ReturnableLineItem {
   id: string;
@@ -31,18 +32,26 @@ export function ReturnDialog({
   lineItems,
   saleSubtotalCents,
   saleTaxCents,
+  hasCustomer,
+  hasStripePayment,
 }: {
   saleId: string;
   lineItems: ReturnableLineItem[];
   saleSubtotalCents: number;
   saleTaxCents: number;
+  hasCustomer: boolean;
+  hasStripePayment: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [reason, setReason] = useState("");
+  const [refundMethod, setRefundMethod] = useState<RefundMethod>(
+    hasStripePayment ? "STRIPE" : "STORE_CREDIT",
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const canChooseMethod = hasStripePayment && hasCustomer;
 
   const selections = lineItems
     .map((item) => ({
@@ -61,12 +70,17 @@ export function ReturnDialog({
         saleId,
         reason,
         selections.map((s) => ({ saleLineItemId: s.saleLineItemId, quantity: s.quantity })),
+        refundMethod,
       );
       if (result.error) {
         setError(result.error);
         toast.error(result.error);
       } else {
-        toast.success(`Refunded ${formatCents(totals.totalCents)}`);
+        toast.success(
+          refundMethod === "STORE_CREDIT"
+            ? `Issued ${formatCents(totals.totalCents)} in store credit`
+            : `Refunded ${formatCents(totals.totalCents)}`,
+        );
         setOpen(false);
         setQuantities({});
         setReason("");
@@ -125,6 +139,25 @@ export function ReturnDialog({
             />
           </div>
 
+          {canChooseMethod && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Refund method</Label>
+              <RadioGroup
+                value={refundMethod}
+                onValueChange={(v) => setRefundMethod(v as RefundMethod)}
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="STRIPE" />
+                  Original payment method
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <RadioGroupItem value="STORE_CREDIT" />
+                  Store credit
+                </label>
+              </RadioGroup>
+            </div>
+          )}
+
           {selections.length > 0 && (
             <div className="space-y-1 border-t border-border/60 pt-4 text-sm">
               <div className="flex justify-between text-muted-foreground">
@@ -155,7 +188,11 @@ export function ReturnDialog({
             onClick={handleSubmit}
           >
             {isPending && <Loader2 className="animate-spin" />}
-            {isPending ? "Processing refund…" : `Refund ${formatCents(totals.totalCents)}`}
+            {isPending
+              ? "Processing…"
+              : refundMethod === "STORE_CREDIT"
+                ? `Issue ${formatCents(totals.totalCents)} store credit`
+                : `Refund ${formatCents(totals.totalCents)}`}
           </Button>
         </div>
       </DialogContent>

@@ -35,7 +35,7 @@ const CONDITION_LABELS: Record<string, string> = {
 
 export function ItemFormDialog() {
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<"DEVICE" | "ACCESSORY">("DEVICE");
+  const [type, setType] = useState<"DEVICE" | "ACCESSORY" | "SERVICE">("DEVICE");
   const [state, formAction, isPending] = useActionState(
     async (prev: ActionState, formData: FormData) => {
       const result = await createInventoryItem(prev, formData);
@@ -59,9 +59,10 @@ export function ItemFormDialog() {
           <DialogTitle>Add inventory item</DialogTitle>
         </DialogHeader>
         <Tabs value={type} onValueChange={(v) => setType(v as typeof type)}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="DEVICE">Device</TabsTrigger>
             <TabsTrigger value="ACCESSORY">Accessory / Part</TabsTrigger>
+            <TabsTrigger value="SERVICE">Service / Plan</TabsTrigger>
           </TabsList>
 
           <form action={formAction} className="mt-4 space-y-4">
@@ -138,6 +139,13 @@ export function ItemFormDialog() {
                 <input type="checkbox" name="isPart" value="true" className="h-4 w-4 rounded border-input" />
                 Usable as a repair part
               </label>
+            </TabsContent>
+
+            <TabsContent value="SERVICE">
+              <p className="text-sm text-muted-foreground">
+                Warranty and protection plans are intangible — sold at the POS like any other
+                item, but never tracked as stock and never run out.
+              </p>
             </TabsContent>
 
             <div className="space-y-1.5">

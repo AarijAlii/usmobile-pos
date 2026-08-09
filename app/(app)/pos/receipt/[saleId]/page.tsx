@@ -20,7 +20,7 @@ export default async function ReceiptPage({
   const { data: sale } = await supabase
     .from("sales")
     .select(
-      "id, status, subtotal_cents, tax_cents, total_cents, created_at, customer:customers(full_name, phone)",
+      "id, status, subtotal_cents, tax_cents, total_cents, created_at, customer_id, stripe_payment_intent_id, customer:customers(full_name, phone)",
     )
     .eq("id", saleId)
     .single();
@@ -143,6 +143,8 @@ export default async function ReceiptPage({
                 lineItems={returnableLineItems}
                 saleSubtotalCents={sale.subtotal_cents}
                 saleTaxCents={sale.tax_cents}
+                hasCustomer={!!sale.customer_id}
+                hasStripePayment={!!sale.stripe_payment_intent_id}
               />
             )}
           </div>

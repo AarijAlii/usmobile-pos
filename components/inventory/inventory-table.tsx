@@ -16,7 +16,7 @@ import { formatCents } from "@/lib/money";
 import { ReceiveStockDialog } from "@/components/inventory/receive-stock-dialog";
 
 export interface InventoryRow {
-  kind: "DEVICE" | "ACCESSORY";
+  kind: "DEVICE" | "ACCESSORY" | "SERVICE";
   id: string;
   productId: string;
   sku: string;
@@ -33,6 +33,7 @@ const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "dest
   RESERVED: "warning",
   DEFECTIVE: "destructive",
   LOW_STOCK: "warning",
+  UNLIMITED: "secondary",
 };
 
 export function InventoryTable({ rows }: { rows: InventoryRow[] }) {

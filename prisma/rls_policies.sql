@@ -438,6 +438,108 @@ with check (
 );
 
 -- ---------------------------------------------------------------------------
+-- held_sales — a parked cart is routine operational data (not sensitive like
+-- a refund), so any staff who can access the store can select/insert/delete
+-- freely — resuming or discarding a held sale is just a delete.
+-- ---------------------------------------------------------------------------
+
+alter table public.held_sales enable row level security;
+
+create policy "held_sales_all_scoped"
+on public.held_sales for all
+using (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+)
+with check (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+-- ---------------------------------------------------------------------------
+-- store_credit_transactions — append-only ledger (no update/delete policy
+-- => denied by default, matching stock_movements/returns). Written only via
+-- create_return() (issuance) and finalize_sale_payment() (redemption).
+-- ---------------------------------------------------------------------------
+
+alter table public.store_credit_transactions enable row level security;
+
+create policy "store_credit_transactions_select_scoped"
+on public.store_credit_transactions for select
+using (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+create policy "store_credit_transactions_insert_scoped"
+on public.store_credit_transactions for insert
+with check (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+-- ---------------------------------------------------------------------------
+-- bundles, bundle_items — catalog-like data (mirrors products): every staff
+-- in the org can read the active kit list to sell at the POS; only
+-- OWNER/ADMIN can define or change what's in a bundle or its price.
+-- ---------------------------------------------------------------------------
+
+alter table public.bundles enable row level security;
+
+create policy "bundles_select_same_org"
+on public.bundles for select
+using (organization_id = public.current_staff_org_id());
+
+create policy "bundles_write_admin_only"
+on public.bundles for insert
+with check (
+  organization_id = public.current_staff_org_id()
+  and public.current_staff_role() in ('OWNER', 'ADMIN')
+);
+
+create policy "bundles_update_admin_only"
+on public.bundles for update
+using (
+  organization_id = public.current_staff_org_id()
+  and public.current_staff_role() in ('OWNER', 'ADMIN')
+)
+with check (organization_id = public.current_staff_org_id());
+
+alter table public.bundle_items enable row level security;
+
+create policy "bundle_items_select_scoped"
+on public.bundle_items for select
+using (
+  exists (
+    select 1 from public.bundles b
+    where b.id = bundle_items.bundle_id
+      and b.organization_id = public.current_staff_org_id()
+  )
+);
+
+create policy "bundle_items_write_admin_only"
+on public.bundle_items for insert
+with check (
+  exists (
+    select 1 from public.bundles b
+    where b.id = bundle_items.bundle_id
+      and b.organization_id = public.current_staff_org_id()
+      and public.current_staff_role() in ('OWNER', 'ADMIN')
+  )
+);
+
+create policy "bundle_items_delete_admin_only"
+on public.bundle_items for delete
+using (
+  exists (
+    select 1 from public.bundles b
+    where b.id = bundle_items.bundle_id
+      and b.organization_id = public.current_staff_org_id()
+      and public.current_staff_role() in ('OWNER', 'ADMIN')
+  )
+);
+
+-- ---------------------------------------------------------------------------
 -- RLS proof (run manually against two seeded orgs to verify isolation):
 --
 --   1. Seed two organizations (Org A, Org B), each with a store and staff.

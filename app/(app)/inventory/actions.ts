@@ -42,14 +42,19 @@ export async function createInventoryItem(
   let productId = existingProduct?.id as string | undefined;
 
   if (!productId) {
+    const trackingType =
+      input.type === "DEVICE" ? "SERIALIZED" : input.type === "SERVICE" ? "SERVICE" : "QUANTITY";
+    const category =
+      input.type === "DEVICE" ? "phone" : input.type === "SERVICE" ? "warranty" : "accessory";
+
     const { data: newProduct, error: productError } = await supabase
       .from("products")
       .insert({
         organization_id: staff.organizationId,
         sku: input.sku,
         name: input.name,
-        category: input.type === "DEVICE" ? "phone" : "accessory",
-        tracking_type: input.type === "DEVICE" ? "SERIALIZED" : "QUANTITY",
+        category,
+        tracking_type: trackingType,
         brand: input.brand || null,
         model: input.model || null,
         default_price_cents: input.priceCents,
@@ -62,6 +67,13 @@ export async function createInventoryItem(
       return { error: productError?.message ?? "Failed to create product" };
     }
     productId = newProduct.id;
+  } else if (input.type === "SERVICE") {
+    return { error: `A service plan with SKU ${input.sku} already exists.` };
+  }
+
+  if (input.type === "SERVICE") {
+    revalidatePath("/inventory");
+    return { success: true };
   }
 
   if (input.type === "DEVICE") {

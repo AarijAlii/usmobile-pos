@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/layout/page-header";
 import { PosTerminal, type SellableItem, type CustomerOption } from "@/components/pos/pos-terminal";
+import type { HeldSaleOption } from "@/components/pos/held-sales-dialog";
 import { requireCurrentStaff, getActiveStoreId } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -8,7 +9,7 @@ export default async function PosPage() {
   const storeId = await getActiveStoreId(staff);
   const supabase = await createClient();
 
-  const [units, levels, customers, store] = await Promise.all([
+  const [units, levels, services, bundles, customers, store, heldSales] = await Promise.all([
     supabase
       .from("inventory_units")
       .select("id, imei, asking_price_cents, product:products(id, name, default_price_cents)")
@@ -21,13 +22,37 @@ export default async function PosPage() {
       .eq("store_id", storeId)
       .gt("quantity_on_hand", 0),
     supabase
+      .from("products")
+      .select("id, name, default_price_cents")
+      .eq("organization_id", staff.organizationId)
+      .eq("tracking_type", "SERVICE"),
+    supabase
+      .from("bundles")
+      .select("id, name, price_cents, items:bundle_items(quantity, product:products(id, name))")
+      .eq("organization_id", staff.organizationId)
+      .eq("is_active", true),
+    supabase
       .from("customers")
-      .select("id, full_name, phone")
+      .select("id, full_name, phone, store_credit_cents")
       .eq("organization_id", staff.organizationId)
       .order("full_name", { ascending: true })
       .limit(50),
     supabase.from("stores").select("tax_rate_bps").eq("id", storeId).single(),
+    supabase
+      .from("held_sales")
+      .select("id, note, created_at, customer:customers(full_name)")
+      .eq("store_id", storeId)
+      .order("created_at", { ascending: false }),
   ]);
+
+  // A bundle's sellable quantity is capped by whichever component has the
+  // least stock relative to how many of it one bundle needs.
+  const stockByProductId = new Map<string, number>(
+    (levels.data ?? []).map((l) => {
+      const product = l.product as unknown as { id: string } | null;
+      return [product?.id ?? "", l.quantity_on_hand];
+    }),
+  );
 
   const items: SellableItem[] = [
     ...(units.data ?? []).map((u): SellableItem => {
@@ -52,13 +77,50 @@ export default async function PosPage() {
         maxQuantity: l.quantity_on_hand,
       };
     }),
+    ...(services.data ?? []).map((s): SellableItem => ({
+      kind: "SERVICE",
+      productId: s.id,
+      name: s.name,
+      priceCents: s.default_price_cents,
+      maxQuantity: 99,
+    })),
+    ...(bundles.data ?? []).map((b): SellableItem => {
+      const bundleItems = (b.items ?? []) as unknown as {
+        quantity: number;
+        product: { id: string; name: string } | null;
+      }[];
+      const capacity = bundleItems.reduce((min, item) => {
+        const available = stockByProductId.get(item.product?.id ?? "") ?? 0;
+        return Math.min(min, Math.floor(available / item.quantity));
+      }, Infinity);
+      return {
+        kind: "BUNDLE",
+        bundleId: b.id,
+        productId: b.id,
+        name: b.name,
+        detail: bundleItems.map((i) => i.product?.name).filter(Boolean).join(" + "),
+        priceCents: b.price_cents,
+        maxQuantity: Number.isFinite(capacity) ? Math.max(0, capacity) : 0,
+      };
+    }),
   ];
 
   const customerOptions: CustomerOption[] = (customers.data ?? []).map((c) => ({
     id: c.id,
     fullName: c.full_name,
     phone: c.phone,
+    storeCreditCents: c.store_credit_cents,
   }));
+
+  const heldSaleOptions: HeldSaleOption[] = (heldSales.data ?? []).map((h) => {
+    const customer = h.customer as unknown as { full_name: string } | null;
+    return {
+      id: h.id,
+      note: h.note,
+      customerName: customer?.full_name ?? null,
+      createdAt: h.created_at,
+    };
+  });
 
   return (
     <div>
@@ -68,6 +130,7 @@ export default async function PosPage() {
           items={items}
           customers={customerOptions}
           taxRateBps={store.data?.tax_rate_bps ?? 0}
+          heldSales={heldSaleOptions}
         />
       </div>
     </div>

@@ -16,10 +16,13 @@ export interface ReturnLineItemSelection {
   quantity: number;
 }
 
+export type RefundMethod = "STRIPE" | "STORE_CREDIT";
+
 export async function createReturn(
   saleId: string,
   reason: string,
   selections: ReturnLineItemSelection[],
+  refundMethod: RefundMethod = "STRIPE",
 ): Promise<ReturnActionState> {
   const staff = await requireCurrentStaff();
 
@@ -32,13 +35,18 @@ export async function createReturn(
 
   const { data: sale } = await supabase
     .from("sales")
-    .select("id, organization_id, store_id, status, subtotal_cents, tax_cents, total_cents, stripe_payment_intent_id")
+    .select(
+      "id, organization_id, store_id, customer_id, status, subtotal_cents, tax_cents, total_cents, stripe_payment_intent_id",
+    )
     .eq("id", saleId)
     .single();
 
   if (!sale) return { error: "Sale not found." };
   if (sale.status !== "PAID") return { error: "This sale is not eligible for a return." };
-  if (!sale.stripe_payment_intent_id) {
+  if (refundMethod === "STORE_CREDIT" && !sale.customer_id) {
+    return { error: "This sale has no customer on file to credit." };
+  }
+  if (refundMethod === "STRIPE" && !sale.stripe_payment_intent_id) {
     return { error: "This sale has no payment on file to refund." };
   }
 
@@ -105,15 +113,18 @@ export async function createReturn(
     return { error: "Only an owner or admin can process a full refund." };
   }
 
-  let refund;
-  try {
-    refund = await stripe.refunds.create({
-      payment_intent: sale.stripe_payment_intent_id,
-      amount: totals.totalCents,
-      reason: "requested_by_customer",
-    });
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : "Stripe refund failed." };
+  let stripeRefundId: string | null = null;
+  if (refundMethod === "STRIPE") {
+    try {
+      const refund = await stripe.refunds.create({
+        payment_intent: sale.stripe_payment_intent_id!,
+        amount: totals.totalCents,
+        reason: "requested_by_customer",
+      });
+      stripeRefundId = refund.id;
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Stripe refund failed." };
+    }
   }
 
   const { error: rpcError } = await supabase.rpc("create_return", {
@@ -129,17 +140,22 @@ export async function createReturn(
     p_subtotal_cents: totals.subtotalCents,
     p_tax_cents: totals.taxCents,
     p_total_cents: totals.totalCents,
-    p_stripe_refund_id: refund.id,
+    p_refund_method: refundMethod,
+    p_stripe_refund_id: stripeRefundId,
+    p_customer_id: refundMethod === "STORE_CREDIT" ? sale.customer_id : null,
   });
 
   if (rpcError) {
     return {
-      error: `Stripe refund ${refund.id} succeeded but saving the return failed (${rpcError.message}). Note this refund ID for manual reconciliation.`,
+      error: stripeRefundId
+        ? `Stripe refund ${stripeRefundId} succeeded but saving the return failed (${rpcError.message}). Note this refund ID for manual reconciliation.`
+        : rpcError.message,
     };
   }
 
   revalidatePath(`/pos/receipt/${saleId}`);
   revalidatePath("/inventory");
   revalidatePath("/dashboard");
+  revalidatePath("/pos");
   return { success: true };
 }

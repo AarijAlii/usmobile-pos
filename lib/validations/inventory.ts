@@ -25,9 +25,15 @@ export const accessoryItemSchema = z.object({
   isPart: z.coerce.boolean().default(false),
 });
 
+export const serviceItemSchema = z.object({
+  type: z.literal("SERVICE"),
+  ...baseFields,
+});
+
 export const inventoryItemSchema = z.discriminatedUnion("type", [
   deviceItemSchema,
   accessoryItemSchema,
+  serviceItemSchema,
 ]);
 
 export type InventoryItemInput = z.infer<typeof inventoryItemSchema>;

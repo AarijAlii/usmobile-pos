@@ -43,6 +43,7 @@ enum StaffRole {
 enum TrackingType {
   SERIALIZED // phones — one row per unit, tracked by IMEI/serial
   QUANTITY // accessories/parts — tracked by a per-store count
+  SERVICE // warranty/protection plans — intangible, never decremented or restocked
 }
 
 enum InventoryUnitStatus {
@@ -95,6 +96,11 @@ enum StockMovementReason {
   INITIAL_STOCK
 }
 
+enum ReturnRefundMethod {
+  STRIPE
+  STORE_CREDIT
+}
+
 // ---------------------------------------------------------------------------
 // Tenancy
 // ---------------------------------------------------------------------------
@@ -106,14 +112,17 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
 
-  stores         Store[]
-  staff          Staff[]
-  customers      Customer[]
-  products       Product[]
-  inventoryUnits InventoryUnit[]
-  sales          Sale[]
-  layaways       Layaway[]
-  returns        Return[]
+  stores                  Store[]
+  staff                   Staff[]
+  customers               Customer[]
+  products                Product[]
+  inventoryUnits          InventoryUnit[]
+  sales                   Sale[]
+  layaways                Layaway[]
+  returns                 Return[]
+  heldSales               HeldSale[]
+  storeCreditTransactions StoreCreditTransaction[]
+  bundles                 Bundle[]
 
   @@map("organizations")
 }
@@ -128,16 +137,18 @@ model Store {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @map("updated_at")
 
-  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  staff          Staff[]
-  inventoryUnits InventoryUnit[]
-  stockLevels    StockLevel[]
-  sales          Sale[]
-  layaways       Layaway[]
-  buybacks       BuybackTransaction[]
-  repairTickets  RepairTicket[]
-  stockMovements StockMovement[]
-  returns        Return[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  staff                   Staff[]
+  inventoryUnits          InventoryUnit[]
+  stockLevels             StockLevel[]
+  sales                   Sale[]
+  layaways                Layaway[]
+  buybacks                BuybackTransaction[]
+  repairTickets           RepairTicket[]
+  stockMovements          StockMovement[]
+  returns                 Return[]
+  heldSales               HeldSale[]
+  storeCreditTransactions StoreCreditTransaction[]
 
   @@index([organizationId])
   @@map("stores")
@@ -156,14 +167,16 @@ model Staff {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @default(now()) @map("updated_at")
 
-  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  store           Store?               @relation(fields: [storeId], references: [id])
-  salesCreated    Sale[]               @relation("SaleCreatedBy")
-  layawaysCreated Layaway[]            @relation("LayawayCreatedBy")
-  buybacksCreated BuybackTransaction[] @relation("BuybackCreatedBy")
-  repairsAssigned RepairTicket[]       @relation("RepairAssignedTo")
-  stockMovements  StockMovement[]
-  returnsCreated  Return[]             @relation("ReturnCreatedBy")
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store                   Store?                   @relation(fields: [storeId], references: [id])
+  salesCreated            Sale[]                   @relation("SaleCreatedBy")
+  layawaysCreated         Layaway[]                @relation("LayawayCreatedBy")
+  buybacksCreated         BuybackTransaction[]     @relation("BuybackCreatedBy")
+  repairsAssigned         RepairTicket[]           @relation("RepairAssignedTo")
+  stockMovements          StockMovement[]
+  returnsCreated          Return[]                 @relation("ReturnCreatedBy")
+  heldSalesCreated        HeldSale[]
+  storeCreditTransactions StoreCreditTransaction[]
 
   @@index([organizationId])
   @@index([storeId])
@@ -171,19 +184,22 @@ model Staff {
 }
 
 model Customer {
-  id             String   @id @default(dbgenerated("gen_random_uuid()"))
-  organizationId String   @map("organization_id")
-  fullName       String   @map("full_name")
-  email          String?
-  phone          String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @default(now()) @map("updated_at")
+  id               String   @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId   String   @map("organization_id")
+  fullName         String   @map("full_name")
+  email            String?
+  phone            String?
+  storeCreditCents Int      @default(0) @map("store_credit_cents")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @map("updated_at")
 
-  organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sales         Sale[]
-  layaways      Layaway[]
-  buybacks      BuybackTransaction[]
-  repairTickets RepairTicket[]
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sales                   Sale[]
+  layaways                Layaway[]
+  buybacks                BuybackTransaction[]
+  repairTickets           RepairTicket[]
+  storeCreditTransactions StoreCreditTransaction[]
+  heldSales               HeldSale[]
 
   @@index([organizationId])
   @@index([organizationId, phone])
@@ -215,6 +231,7 @@ model Product {
   stockLevels     StockLevel[]
   saleLineItems   SaleLineItem[]
   repairPartsUsed RepairPartUsed[]
+  bundleItems     BundleItem[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -268,6 +285,48 @@ model StockLevel {
 }
 
 // ---------------------------------------------------------------------------
+// Bundles (fixed-price kits of accessory products)
+// ---------------------------------------------------------------------------
+
+/// A fixed-price kit of QUANTITY-tracked accessory products sold as one
+/// catalog entry at a discount off the components' combined default price.
+/// Serialized devices are intentionally not supported as components —
+/// picking which specific IMEI unit satisfies a bundle at cart-add time is a
+/// materially different (and more complex) problem than bundling
+/// interchangeable accessory stock, so it's out of scope here. At checkout,
+/// a bundle line expands into one SaleLineItem per component (see
+/// lib/bundles.ts) so returns/restocking work per-component exactly like a
+/// normal sale.
+model Bundle {
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @map("organization_id")
+  name           String
+  priceCents     Int      @map("price_cents")
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  items        BundleItem[]
+
+  @@index([organizationId])
+  @@map("bundles")
+}
+
+model BundleItem {
+  id        String @id @default(dbgenerated("gen_random_uuid()"))
+  bundleId  String @map("bundle_id")
+  productId String @map("product_id")
+  quantity  Int    @default(1)
+
+  bundle  Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([bundleId])
+  @@map("bundle_items")
+}
+
+// ---------------------------------------------------------------------------
 // Sales (POS checkout)
 // ---------------------------------------------------------------------------
 
@@ -281,6 +340,7 @@ model Sale {
   subtotalCents           Int        @default(0) @map("subtotal_cents")
   taxCents                Int        @default(0) @map("tax_cents")
   totalCents              Int        @default(0) @map("total_cents")
+  storeCreditAppliedCents Int        @default(0) @map("store_credit_applied_cents")
   stripeCheckoutSessionId String?    @unique @map("stripe_checkout_session_id")
   stripePaymentIntentId   String?    @unique @map("stripe_payment_intent_id")
   createdAt               DateTime   @default(now()) @map("created_at")
@@ -318,30 +378,62 @@ model SaleLineItem {
 }
 
 // ---------------------------------------------------------------------------
+// Held sales (same-day park/resume, no deposit — distinct from Layaway)
+// ---------------------------------------------------------------------------
+
+/// A cart parked mid-checkout so staff can help another customer, resumed
+/// (or discarded) later the same day. Unlike Layaway there's no deposit, no
+/// reserved unit, and no due date — it's purely a saved cart. `cart` mirrors
+/// the exact shape the checkout action already accepts (see
+/// lib/validations/pos.ts's cartLineSchema) so resuming just re-runs the
+/// same re-pricing/availability checks checkout always does.
+model HeldSale {
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @map("organization_id")
+  storeId        String   @map("store_id")
+  createdById    String   @map("created_by_id")
+  customerId     String?  @map("customer_id")
+  note           String?
+  cart           Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy    Staff        @relation(fields: [createdById], references: [id])
+  customer     Customer?    @relation(fields: [customerId], references: [id])
+
+  @@index([organizationId, storeId])
+  @@map("held_sales")
+}
+
+// ---------------------------------------------------------------------------
 // Returns / refunds
 // ---------------------------------------------------------------------------
 
 /// A completed, staff-initiated return against a PAID sale. Always represents
-/// a refund that has already succeeded with Stripe — the row is written only
-/// after stripe.refunds.create() confirms, so (unlike Sale, which has
-/// in-flight statuses) there is no separate status column here.
+/// a refund that has already succeeded — either with Stripe (stripeRefundId
+/// set) or as issued store credit (refundMethod = STORE_CREDIT, no Stripe
+/// involved) — the row is written only after the refund actually happened,
+/// so (unlike Sale, which has in-flight statuses) there is no separate
+/// status column here.
 ///
 /// A return that would fully refund the sale (this return's total plus any
 /// prior returns on the same sale >= the sale's total) requires OWNER/ADMIN —
 /// enforced by the existing sales_update_scoped RLS policy, which already
 /// restricts who may set sales.status = 'REFUNDED'. See app/(app)/pos/actions.ts.
 model Return {
-  id             String   @id @default(dbgenerated("gen_random_uuid()"))
-  organizationId String   @map("organization_id")
-  storeId        String   @map("store_id")
-  saleId         String   @map("sale_id")
-  createdById    String   @map("created_by_id")
+  id             String             @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String             @map("organization_id")
+  storeId        String             @map("store_id")
+  saleId         String             @map("sale_id")
+  createdById    String             @map("created_by_id")
   reason         String?
-  subtotalCents  Int      @map("subtotal_cents")
-  taxCents       Int      @map("tax_cents")
-  totalCents     Int      @map("total_cents")
-  stripeRefundId String   @map("stripe_refund_id")
-  createdAt      DateTime @default(now()) @map("created_at")
+  subtotalCents  Int                @map("subtotal_cents")
+  taxCents       Int                @map("tax_cents")
+  totalCents     Int                @map("total_cents")
+  refundMethod   ReturnRefundMethod @default(STRIPE) @map("refund_method")
+  stripeRefundId String?            @map("stripe_refund_id")
+  createdAt      DateTime           @default(now()) @map("created_at")
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   store        Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
@@ -368,6 +460,37 @@ model ReturnLineItem {
   @@index([returnId])
   @@index([saleLineItemId])
   @@map("return_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Store credit
+// ---------------------------------------------------------------------------
+
+/// Append-only ledger backing Customer.storeCreditCents — every issuance
+/// (from a store-credit return) and every redemption (applied toward a
+/// later sale) gets its own signed row, so the running balance is always
+/// reconstructable and auditable, matching the StockMovement pattern for
+/// inventory. amountCents is positive for issuance, negative for redemption.
+model StoreCreditTransaction {
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @map("organization_id")
+  storeId        String   @map("store_id")
+  customerId     String   @map("customer_id")
+  amountCents    Int      @map("amount_cents")
+  reason         String // "return_credit" | "sale_redemption" | "manual_adjustment"
+  referenceType  String?  @map("reference_type") // "return" | "sale"
+  referenceId    String?  @map("reference_id")
+  createdById    String?  @map("created_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  createdBy    Staff?       @relation(fields: [createdById], references: [id])
+
+  @@index([organizationId, storeId])
+  @@index([customerId])
+  @@map("store_credit_transactions")
 }
 
 // ---------------------------------------------------------------------------
