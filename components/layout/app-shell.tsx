@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion } from "motion/react";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -32,7 +33,7 @@ const NAV_ITEMS = [
   { href: "/repairs", label: "Repairs", icon: Wrench },
 ];
 
-function NavLinks({ pathname }: { pathname: string }) {
+function NavLinks({ pathname, scope }: { pathname: string; scope: string }) {
   return (
     <>
       {NAV_ITEMS.map((item) => {
@@ -43,14 +44,23 @@ function NavLinks({ pathname }: { pathname: string }) {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
+              "group relative flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
               isActive
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                ? "text-secondary-foreground"
+                : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
-            {item.label}
+            {isActive ? (
+              <motion.div
+                layoutId={`nav-active-pill-${scope}`}
+                className="absolute inset-0 rounded-xl bg-secondary"
+                transition={{ type: "spring", stiffness: 500, damping: 34 }}
+              />
+            ) : (
+              <span className="absolute inset-0 rounded-xl bg-secondary/60 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+            )}
+            <Icon className="relative z-10 h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+            <span className="relative z-10">{item.label}</span>
           </Link>
         );
       })}
@@ -82,7 +92,7 @@ export function AppShell({
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-2">
-          <NavLinks pathname={pathname} />
+          <NavLinks pathname={pathname} scope="desktop" />
         </nav>
 
         <div className="border-t border-border/60 p-3">
@@ -132,7 +142,7 @@ export function AppShell({
                 </span>
               </div>
               <nav className="space-y-1 px-3 py-2">
-                <NavLinks pathname={pathname} />
+                <NavLinks pathname={pathname} scope="mobile" />
               </nav>
             </SheetContent>
           </Sheet>
@@ -145,7 +155,23 @@ export function AppShell({
             </Button>
           </form>
         </header>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="ambient-surface flex-1 overflow-y-auto">
+          {/*
+            No exit animation on purpose: this container scrolls
+            (overflow-y-auto), and an exiting + entering page both present
+            in normal flow at once would stack rather than cross-fade. A
+            clean keyed enter animation gives a real "the screen changed"
+            feel without that layout jank.
+          */}
+          <motion.div
+            key={pathname}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {children}
+          </motion.div>
+        </main>
       </div>
     </div>
   );

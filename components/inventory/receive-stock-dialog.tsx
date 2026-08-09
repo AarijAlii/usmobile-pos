@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { PackagePlus } from "lucide-react";
+import { Loader2, PackagePlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,6 +59,7 @@ export function ReceiveStockDialog({
             </p>
           )}
           <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending && <Loader2 className="animate-spin" />}
             {isPending ? "Saving…" : "Add to stock"}
           </Button>
         </form>

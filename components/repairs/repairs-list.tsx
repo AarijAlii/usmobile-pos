@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/money";
@@ -63,7 +64,7 @@ export function RepairsList({ rows }: { rows: RepairRow[] }) {
           <Link
             key={ticket.id}
             href={`/repairs/${ticket.id}`}
-            className="flex items-center justify-between rounded-xl border border-border/60 bg-background p-4 transition-colors hover:border-primary/40 hover:bg-secondary/40"
+            className="group flex items-center justify-between rounded-xl border border-border/60 bg-background p-4 transition-[transform,border-color,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary/40 hover:shadow-premium"
           >
             <div className="min-w-0">
               <p className="font-medium leading-tight">{ticket.deviceDescription}</p>
@@ -75,11 +76,14 @@ export function RepairsList({ rows }: { rows: RepairRow[] }) {
                 {new Date(ticket.createdAt).toLocaleDateString()}
               </p>
             </div>
-            <div className="ml-4 flex shrink-0 flex-col items-end gap-1.5">
-              <Badge variant={REPAIR_STATUS_BADGE_VARIANT[ticket.status]}>
-                {REPAIR_STATUS_LABELS[ticket.status]}
-              </Badge>
-              <span className="text-sm font-medium">{formatCents(ticket.totalCents)}</span>
+            <div className="ml-4 flex shrink-0 items-center gap-3">
+              <div className="flex flex-col items-end gap-1.5">
+                <Badge variant={REPAIR_STATUS_BADGE_VARIANT[ticket.status]}>
+                  {REPAIR_STATUS_LABELS[ticket.status]}
+                </Badge>
+                <span className="text-sm font-medium">{formatCents(ticket.totalCents)}</span>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 -translate-x-1 text-muted-foreground opacity-0 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:translate-x-0 group-hover:opacity-100" />
             </div>
           </Link>
         ))}

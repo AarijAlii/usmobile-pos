@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { Minus, Plus, Search, Trash2, X } from "lucide-react";
+import { Loader2, Minus, Plus, Search, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -150,7 +150,7 @@ export function PosTerminal({
                 key={key}
                 type="button"
                 onClick={() => addItem(item)}
-                className="rounded-xl border border-border/60 bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-secondary/40"
+                className="rounded-xl border border-border/60 bg-background p-4 text-left transition-[transform,border-color,box-shadow,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary/40 hover:shadow-premium active:translate-y-0 active:scale-[0.98]"
               >
                 <p className="font-medium leading-tight">{item.name}</p>
                 {item.detail && (
@@ -319,6 +319,7 @@ export function PosTerminal({
               </>
             )}
             <Button type="submit" className="w-full" disabled={cart.length === 0 || isPending}>
+              {isPending && <Loader2 className="animate-spin" />}
               {isPending ? "Redirecting to payment…" : `Charge ${formatCents(totals.totalCents)}`}
             </Button>
           </form>

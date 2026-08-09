@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,6 +194,7 @@ export function LayawayFormDialog({
           )}
 
           <Button type="submit" className="w-full" disabled={isPending || devices.length === 0}>
+            {isPending && <Loader2 className="animate-spin" />}
             {isPending ? "Creating…" : "Create layaway & collect deposit"}
           </Button>
         </form>

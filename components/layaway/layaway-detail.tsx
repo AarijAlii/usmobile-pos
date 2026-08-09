@@ -4,7 +4,7 @@ import { useActionState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -163,6 +163,7 @@ export function LayawayDetail({
                   />
                 </div>
                 <Button type="submit" size="sm" disabled={isSubmitting}>
+                  {isSubmitting && <Loader2 className="animate-spin" />}
                   {isSubmitting ? "Redirecting…" : "Charge"}
                 </Button>
               </form>

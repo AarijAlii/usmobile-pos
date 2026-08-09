@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -133,6 +133,7 @@ export function IntakeDialog({ customers }: { customers: CustomerOption[] }) {
           )}
 
           <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending && <Loader2 className="animate-spin" />}
             {isPending ? "Creating…" : "Create ticket"}
           </Button>
         </form>

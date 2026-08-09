@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +44,7 @@ export function LoginForm() {
             </p>
           )}
           <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending && <Loader2 className="animate-spin" />}
             {isPending ? "Signing in…" : "Sign in"}
           </Button>
         </form>

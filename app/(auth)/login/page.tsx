@@ -7,10 +7,10 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm">
+    <div className="ambient-surface flex min-h-screen items-center justify-center px-4">
+      <div className="page-fade-in w-full max-w-sm">
         <div className="mb-10 text-center">
-          <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-2xl font-semibold text-primary-foreground">
+          <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-2xl font-semibold text-primary-foreground shadow-[0_0_0_1px_rgba(255,255,255,0.08),0_8px_24px_-4px_rgba(0,113,227,0.5)]">
             U
           </div>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">

@@ -16,7 +16,12 @@ export function StatCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("border-border/60", className)}>
+    <Card
+      className={cn(
+        "border-border/60 transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-premium",
+        className,
+      )}
+    >
       <CardContent className="flex items-start justify-between pt-6">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>
@@ -25,8 +30,11 @@ export function StatCard({
             <p className="mt-1 text-sm text-muted-foreground">{subtext}</p>
           )}
         </div>
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary">
-          <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={2} />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary transition-colors duration-300 group-hover/card:bg-primary/15">
+          <Icon
+            className="h-5 w-5 text-muted-foreground transition-colors duration-300 group-hover/card:text-primary"
+            strokeWidth={2}
+          />
         </div>
       </CardContent>
     </Card>
