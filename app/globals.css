@@ -50,17 +50,62 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
-  --shadow-premium: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  /* A var() reference, not a literal — so the generated .shadow-premium
+     utility keeps resolving against whichever of :root/.dark is active at
+     runtime, instead of Tailwind baking one theme's value in at build time. */
+  --shadow-premium: var(--shadow-premium-value);
 }
 
 /*
- * USMobile POS runs in a single permanent dark theme — a store back-office
- * screen sits next to a register all day, so it's tuned for that: pure
- * black canvas, zinc surfaces for depth, one blue accent reserved for
- * primary actions, and status color kept separate from that accent so
- * "needs attention" always reads independently of "do this."
+ * USMobile POS ships two themes, light and dark, toggled at runtime via
+ * next-themes (.dark class on <html>) rather than system preference —
+ * a store back-office screen sits next to a register all shift, and staff
+ * expect an explicit switch to behave predictably, not silently follow the
+ * OS. Both themes share one blue accent for primary actions and keep status
+ * color (success/warning/destructive) separate from that accent, so "needs
+ * attention" always reads independently of "do this," in either theme.
  */
 :root {
+  --background: #f5f5f7;
+  --foreground: #1d1d1f;
+  --card: #ffffff;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #0071e3;
+  --primary-foreground: #ffffff;
+  --secondary: #e8e8ed;
+  --secondary-foreground: #1d1d1f;
+  --muted: #f0f0f2;
+  --muted-foreground: #6e6e73;
+  --accent: #e8e8ed;
+  --accent-foreground: #1d1d1f;
+  --destructive: #d70015;
+  --success: #248a3d;
+  --success-foreground: #ffffff;
+  --warning: #b25000;
+  --warning-foreground: #ffffff;
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.14);
+  --ring: rgba(0, 113, 227, 0.5);
+  --chart-1: #0071e3;
+  --chart-2: #248a3d;
+  --chart-3: #b25000;
+  --chart-4: #6e6e73;
+  --chart-5: #d4d4d8;
+  --radius: 0.75rem;
+  --sidebar: #f5f5f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #0071e3;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8ed;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: rgba(0, 113, 227, 0.5);
+  --shadow-premium-value: 0 8px 30px -4px rgba(0, 0, 0, 0.12), 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark {
   --background: #000000;
   --foreground: #f5f5f7;
   --card: #18181b;
@@ -88,7 +133,6 @@
   --chart-3: #ff9f0a;
   --chart-4: #a1a1aa;
   --chart-5: #3f3f46;
-  --radius: 0.75rem;
   --sidebar: #000000;
   --sidebar-foreground: #f5f5f7;
   --sidebar-primary: #0071e3;
@@ -97,6 +141,7 @@
   --sidebar-accent-foreground: #f5f5f7;
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-ring: rgba(0, 113, 227, 0.5);
+  --shadow-premium-value: 0 8px 32px 0 rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
 @layer base {
@@ -109,6 +154,9 @@
   }
   html {
     @apply font-sans;
+    color-scheme: light;
+  }
+  html.dark {
     color-scheme: dark;
   }
 }
@@ -116,14 +164,27 @@
 @layer utilities {
   /*
    * Two soft blue glows anchored to the viewport (background-attachment:
-   * fixed) plus a fine grain texture — depth for the screens people stare
-   * at all day, without competing with the data on top of it. Kept as a
-   * background composite rather than a decorative DOM element specifically
-   * to dodge z-index/stacking-context fights with the app shell's own
-   * opaque surfaces.
+   * fixed) — depth for the screens people stare at all day, without
+   * competing with the data on top of it. Kept as a background composite
+   * rather than a decorative DOM element specifically to dodge z-index/
+   * stacking-context fights with the app shell's own opaque surfaces.
+   *
+   * Light mode skips the grain texture dark mode uses — noise that reads as
+   * "rich depth" on black reads as "dirty screen" on white, so the glow
+   * alone (at much lower opacity) carries the effect in light mode instead.
    */
   .ambient-surface {
     background-color: var(--background);
+    background-image:
+      radial-gradient(650px circle at 14% 6%, rgba(0, 113, 227, 0.06), transparent 60%),
+      radial-gradient(550px circle at 92% 70%, rgba(0, 113, 227, 0.045), transparent 55%);
+    background-repeat: no-repeat, no-repeat;
+    background-position: 0 0, 0 0;
+    background-size: auto, auto;
+    background-attachment: fixed, fixed;
+  }
+
+  .dark .ambient-surface {
     background-image:
       radial-gradient(650px circle at 14% 6%, rgba(0, 113, 227, 0.14), transparent 60%),
       radial-gradient(550px circle at 92% 70%, rgba(0, 113, 227, 0.09), transparent 55%),

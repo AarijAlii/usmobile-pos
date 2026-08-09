@@ -23,6 +23,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { signOut } from "@/app/(auth)/login/actions";
+import { ThemeToggle } from "@/components/theme-toggle";
 import type { CurrentStaff } from "@/lib/auth";
 
 const NAV_ITEMS = [
@@ -112,6 +113,7 @@ export function AppShell({
                 </p>
               </div>
             </Link>
+            <ThemeToggle className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground" />
             <form action={signOut}>
               <Button
                 type="submit"
@@ -164,11 +166,14 @@ export function AppShell({
           <span className="text-[15px] font-semibold tracking-tight">
             USMobile POS
           </span>
-          <form action={signOut}>
-            <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </form>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <form action={signOut}>
+              <Button type="submit" variant="ghost" size="icon" aria-label="Sign out">
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
         </header>
         <main className="ambient-surface flex-1 overflow-y-auto">
           {/*
