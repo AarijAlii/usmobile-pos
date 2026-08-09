@@ -63,7 +63,10 @@ export default async function RepairTicketPage({
 
   return (
     <div>
-      <PageHeader title={ticket.device_description} description={`Ticket #${ticket.id.slice(0, 8)}`} />
+      <PageHeader
+        title={ticket.device_description}
+        description={<>Ticket <span className="font-mono">#{ticket.id.slice(0, 8)}</span></>}
+      />
       <div className="p-6 md:p-8">
         <TicketDetail
           ticket={{

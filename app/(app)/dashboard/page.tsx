@@ -4,7 +4,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/money";
-import { REPAIR_STATUS_LABELS } from "@/lib/repair-status";
+import { REPAIR_STATUS_LABELS, REPAIR_STATUS_BADGE_VARIANT } from "@/lib/repair-status";
 import { requireCurrentStaff, getActiveStoreId } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 px-6 pb-8 lg:grid-cols-2 md:px-8">
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Recent repair tickets</CardTitle>
           </CardHeader>
@@ -108,7 +108,13 @@ export default async function DashboardPage() {
                 <span className="text-sm font-medium">
                   {ticket.device_description}
                 </span>
-                <Badge variant="secondary">
+                <Badge
+                  variant={
+                    REPAIR_STATUS_BADGE_VARIANT[
+                      ticket.status as keyof typeof REPAIR_STATUS_BADGE_VARIANT
+                    ] ?? "secondary"
+                  }
+                >
                   {REPAIR_STATUS_LABELS[
                     ticket.status as keyof typeof REPAIR_STATUS_LABELS
                   ] ?? ticket.status}
@@ -118,7 +124,7 @@ export default async function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Low stock</CardTitle>
           </CardHeader>
@@ -137,7 +143,7 @@ export default async function DashboardPage() {
                   {(item.product as unknown as { name: string } | null)?.name ??
                     "Unknown item"}
                 </span>
-                <Badge variant="destructive">{item.quantity_on_hand} left</Badge>
+                <Badge variant="warning">{item.quantity_on_hand} left</Badge>
               </div>
             ))}
           </CardContent>

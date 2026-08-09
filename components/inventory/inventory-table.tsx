@@ -27,12 +27,12 @@ export interface InventoryRow {
   quantity: number | null;
 }
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  IN_STOCK: "secondary",
-  SOLD: "default",
-  RESERVED: "secondary",
+const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "destructive"> = {
+  IN_STOCK: "success",
+  SOLD: "secondary",
+  RESERVED: "warning",
   DEFECTIVE: "destructive",
-  LOW_STOCK: "destructive",
+  LOW_STOCK: "warning",
 };
 
 export function InventoryTable({ rows }: { rows: InventoryRow[] }) {
@@ -84,11 +84,15 @@ export function InventoryTable({ rows }: { rows: InventoryRow[] }) {
             {filtered.map((row) => (
               <TableRow key={`${row.kind}-${row.id}`}>
                 <TableCell className="font-medium">{row.name}</TableCell>
-                <TableCell className="text-muted-foreground">{row.sku}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{row.sku}</TableCell>
                 <TableCell className="text-muted-foreground">
-                  {row.kind === "ACCESSORY" ? `${row.quantity} in stock` : row.detail}
+                  {row.kind === "ACCESSORY" ? (
+                    <span className="tabular-nums">{row.quantity} in stock</span>
+                  ) : (
+                    <span className="font-mono text-xs">{row.detail}</span>
+                  )}
                 </TableCell>
-                <TableCell>{formatCents(row.priceCents)}</TableCell>
+                <TableCell className="tabular-nums">{formatCents(row.priceCents)}</TableCell>
                 <TableCell>
                   <Badge variant={STATUS_VARIANT[row.status] ?? "secondary"}>
                     {row.status.replace(/_/g, " ").toLowerCase()}

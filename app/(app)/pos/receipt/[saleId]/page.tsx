@@ -34,7 +34,7 @@ export default async function ReceiptPage({
 
   return (
     <div className="mx-auto max-w-lg p-6 md:p-8">
-      <Card className="border-border/60 shadow-sm print:border-none print:shadow-none">
+      <Card className="border-border/60 print:border-none">
         <CardHeader className="text-center">
           <CardTitle className="text-xl">Receipt</CardTitle>
           <p className="text-sm text-muted-foreground">
@@ -42,7 +42,13 @@ export default async function ReceiptPage({
           </p>
           <Badge
             className="mx-auto mt-2"
-            variant={sale.status === "PAID" ? "secondary" : "destructive"}
+            variant={
+              sale.status === "PAID"
+                ? "success"
+                : sale.status === "AWAITING_PAYMENT"
+                  ? "warning"
+                  : "destructive"
+            }
           >
             {sale.status}
           </Badge>

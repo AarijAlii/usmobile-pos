@@ -13,7 +13,7 @@ export function LoginForm() {
   const [state, formAction, isPending] = useActionState(login, initialState);
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60">
       <CardContent className="pt-6">
         <form action={formAction} className="space-y-5">
           <div className="space-y-2">

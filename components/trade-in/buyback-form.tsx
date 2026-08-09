@@ -39,7 +39,7 @@ export function BuybackForm({ customers }: { customers: CustomerOption[] }) {
   );
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60">
       <CardContent className="pt-6">
         <form action={formAction} key={state.success ? "reset" : "form"} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">

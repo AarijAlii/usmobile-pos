@@ -5,7 +5,11 @@ import { useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/money";
-import { REPAIR_STATUS_LABELS, type RepairStatus } from "@/lib/repair-status";
+import {
+  REPAIR_STATUS_LABELS,
+  REPAIR_STATUS_BADGE_VARIANT,
+  type RepairStatus,
+} from "@/lib/repair-status";
 
 export interface RepairRow {
   id: string;
@@ -72,7 +76,9 @@ export function RepairsList({ rows }: { rows: RepairRow[] }) {
               </p>
             </div>
             <div className="ml-4 flex shrink-0 flex-col items-end gap-1.5">
-              <Badge variant="secondary">{REPAIR_STATUS_LABELS[ticket.status]}</Badge>
+              <Badge variant={REPAIR_STATUS_BADGE_VARIANT[ticket.status]}>
+                {REPAIR_STATUS_LABELS[ticket.status]}
+              </Badge>
               <span className="text-sm font-medium">{formatCents(ticket.totalCents)}</span>
             </div>
           </Link>

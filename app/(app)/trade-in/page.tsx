@@ -41,7 +41,7 @@ export default async function TradeInPage() {
           }))}
         />
 
-        <Card className="h-fit border-border/60 shadow-sm">
+        <Card className="h-fit border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Recent trade-ins</CardTitle>
           </CardHeader>

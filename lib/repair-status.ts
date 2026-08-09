@@ -40,3 +40,16 @@ export const REPAIR_STATUS_LABELS: Record<RepairStatus, string> = {
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
 };
+
+/** Encodes ticket state at a glance: new work is neutral, active work is a warning (needs attention), done is success, cancelled is destructive. */
+export const REPAIR_STATUS_BADGE_VARIANT: Record<
+  RepairStatus,
+  "secondary" | "warning" | "success" | "destructive"
+> = {
+  INTAKE: "secondary",
+  DIAGNOSING: "warning",
+  IN_REPAIR: "warning",
+  READY_FOR_PICKUP: "success",
+  COMPLETED: "success",
+  CANCELLED: "destructive",
+};

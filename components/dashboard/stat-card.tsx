@@ -16,7 +16,7 @@ export function StatCard({
   className?: string;
 }) {
   return (
-    <Card className={cn("border-border/60 shadow-sm", className)}>
+    <Card className={cn("border-border/60", className)}>
       <CardContent className="flex items-start justify-between pt-6">
         <div>
           <p className="text-sm text-muted-foreground">{label}</p>

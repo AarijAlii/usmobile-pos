@@ -20,6 +20,7 @@ import {
 import { formatCents } from "@/lib/money";
 import {
   REPAIR_STATUS_LABELS,
+  REPAIR_STATUS_BADGE_VARIANT,
   isValidRepairStatusTransition,
   type RepairStatus,
 } from "@/lib/repair-status";
@@ -105,7 +106,7 @@ export function TicketDetail({
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
       <div className="space-y-6 lg:col-span-2">
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Ticket details</CardTitle>
           </CardHeader>
@@ -120,7 +121,7 @@ export function TicketDetail({
               </div>
               <div>
                 <p className="text-muted-foreground">IMEI / Serial</p>
-                <p className="font-medium">{ticket.imei ?? "—"}</p>
+                <p className="font-mono text-xs font-medium">{ticket.imei ?? "—"}</p>
               </div>
             </div>
             <div>
@@ -143,12 +144,12 @@ export function TicketDetail({
       </div>
 
       <div className="space-y-6">
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Status</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Badge variant="secondary" className="text-sm">
+            <Badge variant={REPAIR_STATUS_BADGE_VARIANT[ticket.status]} className="text-sm">
               {REPAIR_STATUS_LABELS[ticket.status]}
             </Badge>
             <div className="flex flex-col gap-2">
@@ -185,7 +186,7 @@ export function TicketDetail({
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm">
+        <Card className="border-border/60">
           <CardHeader>
             <CardTitle className="text-base">Total</CardTitle>
           </CardHeader>
@@ -242,7 +243,7 @@ function DiagnosisCard({
   }
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60">
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-base">Diagnosis notes</CardTitle>
         <Button variant="outline" size="sm" onClick={handleSuggest} disabled={isSuggesting}>
@@ -283,7 +284,7 @@ function PartsCard({
   const [state, formAction, isPending] = useActionState(addPart, initialState);
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60">
       <CardHeader>
         <CardTitle className="text-base">Parts used</CardTitle>
       </CardHeader>
@@ -348,7 +349,7 @@ function LaborCard({ ticketId, laborCents }: { ticketId: string; laborCents: num
   const [state, formAction, isPending] = useActionState(updateLabor, initialState);
 
   return (
-    <Card className="border-border/60 shadow-sm">
+    <Card className="border-border/60">
       <CardHeader>
         <CardTitle className="text-base">Labor</CardTitle>
       </CardHeader>

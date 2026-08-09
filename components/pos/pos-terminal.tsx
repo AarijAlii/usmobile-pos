@@ -154,7 +154,7 @@ export function PosTerminal({
               >
                 <p className="font-medium leading-tight">{item.name}</p>
                 {item.detail && (
-                  <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
+                  <p className="mt-0.5 font-mono text-xs text-muted-foreground">{item.detail}</p>
                 )}
                 <p className="mt-2 text-sm text-muted-foreground">
                   {formatCents(item.priceCents)}
@@ -171,7 +171,7 @@ export function PosTerminal({
         </div>
       </div>
 
-      <Card className="h-fit border-border/60 shadow-sm lg:sticky lg:top-6">
+      <Card className="h-fit border-border/60 lg:sticky lg:top-6">
         <CardContent className="space-y-5 pt-6">
           <div className="space-y-2">
             {cart.length === 0 && (
