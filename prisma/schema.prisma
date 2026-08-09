@@ -113,6 +113,7 @@ model Organization {
   inventoryUnits InventoryUnit[]
   sales          Sale[]
   layaways       Layaway[]
+  returns        Return[]
 
   @@map("organizations")
 }
@@ -136,6 +137,7 @@ model Store {
   buybacks       BuybackTransaction[]
   repairTickets  RepairTicket[]
   stockMovements StockMovement[]
+  returns        Return[]
 
   @@index([organizationId])
   @@map("stores")
@@ -161,6 +163,7 @@ model Staff {
   buybacksCreated BuybackTransaction[] @relation("BuybackCreatedBy")
   repairsAssigned RepairTicket[]       @relation("RepairAssignedTo")
   stockMovements  StockMovement[]
+  returnsCreated  Return[]             @relation("ReturnCreatedBy")
 
   @@index([organizationId])
   @@index([storeId])
@@ -289,6 +292,7 @@ model Sale {
   createdBy    Staff          @relation("SaleCreatedBy", fields: [createdById], references: [id])
   lineItems    SaleLineItem[]
   layaway      Layaway?
+  returns      Return[]
 
   @@index([organizationId, storeId])
   @@index([storeId, status])
@@ -304,12 +308,66 @@ model SaleLineItem {
   unitPriceCents  Int     @map("unit_price_cents")
   lineTotalCents  Int     @map("line_total_cents")
 
-  sale          Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  product       Product        @relation(fields: [productId], references: [id])
-  inventoryUnit InventoryUnit? @relation(fields: [inventoryUnitId], references: [id])
+  sale            Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product         Product          @relation(fields: [productId], references: [id])
+  inventoryUnit   InventoryUnit?   @relation(fields: [inventoryUnitId], references: [id])
+  returnLineItems ReturnLineItem[]
 
   @@index([saleId])
   @@map("sale_line_items")
+}
+
+// ---------------------------------------------------------------------------
+// Returns / refunds
+// ---------------------------------------------------------------------------
+
+/// A completed, staff-initiated return against a PAID sale. Always represents
+/// a refund that has already succeeded with Stripe — the row is written only
+/// after stripe.refunds.create() confirms, so (unlike Sale, which has
+/// in-flight statuses) there is no separate status column here.
+///
+/// A return that would fully refund the sale (this return's total plus any
+/// prior returns on the same sale >= the sale's total) requires OWNER/ADMIN —
+/// enforced by the existing sales_update_scoped RLS policy, which already
+/// restricts who may set sales.status = 'REFUNDED'. See app/(app)/pos/actions.ts.
+model Return {
+  id             String   @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId String   @map("organization_id")
+  storeId        String   @map("store_id")
+  saleId         String   @map("sale_id")
+  createdById    String   @map("created_by_id")
+  reason         String?
+  subtotalCents  Int      @map("subtotal_cents")
+  taxCents       Int      @map("tax_cents")
+  totalCents     Int      @map("total_cents")
+  stripeRefundId String   @map("stripe_refund_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store        Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  sale         Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdBy    Staff            @relation("ReturnCreatedBy", fields: [createdById], references: [id])
+  lineItems    ReturnLineItem[]
+
+  @@index([organizationId, storeId])
+  @@index([saleId])
+  @@map("returns")
+}
+
+model ReturnLineItem {
+  id             String @id @default(dbgenerated("gen_random_uuid()"))
+  returnId       String @map("return_id")
+  saleLineItemId String @map("sale_line_item_id")
+  quantity       Int
+  unitPriceCents Int    @map("unit_price_cents")
+  lineTotalCents Int    @map("line_total_cents")
+
+  return       Return       @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  saleLineItem SaleLineItem @relation(fields: [saleLineItemId], references: [id])
+
+  @@index([returnId])
+  @@index([saleLineItemId])
+  @@map("return_line_items")
 }
 
 // ---------------------------------------------------------------------------

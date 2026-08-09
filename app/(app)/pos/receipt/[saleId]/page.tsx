@@ -2,9 +2,11 @@ import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/money";
+import { calcReturnableQuantity } from "@/lib/returns";
 import { requireCurrentStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { PrintButton } from "./print-button";
+import { ReturnDialog } from "@/components/pos/return-dialog";
 
 export default async function ReceiptPage({
   params,
@@ -29,6 +31,43 @@ export default async function ReceiptPage({
     .from("sale_line_items")
     .select("id, quantity, unit_price_cents, line_total_cents, product:products(name)")
     .eq("sale_id", saleId);
+
+  const { data: existingReturns } = await supabase
+    .from("returns")
+    .select("id, total_cents")
+    .eq("sale_id", saleId);
+
+  const alreadyRefundedCents = (existingReturns ?? []).reduce((sum, r) => sum + r.total_cents, 0);
+
+  const alreadyReturnedByLineItem = new Map<string, number>();
+  const existingReturnIds = (existingReturns ?? []).map((r) => r.id);
+  if (existingReturnIds.length > 0) {
+    const { data: existingReturnLineItems } = await supabase
+      .from("return_line_items")
+      .select("sale_line_item_id, quantity")
+      .in("return_id", existingReturnIds);
+    for (const row of existingReturnLineItems ?? []) {
+      alreadyReturnedByLineItem.set(
+        row.sale_line_item_id,
+        (alreadyReturnedByLineItem.get(row.sale_line_item_id) ?? 0) + row.quantity,
+      );
+    }
+  }
+
+  const returnableLineItems = (lineItems ?? []).map((item) => {
+    const product = item.product as unknown as { name: string } | null;
+    return {
+      id: item.id,
+      productName: product?.name ?? "Item",
+      unitPriceCents: item.unit_price_cents,
+      returnableQuantity: calcReturnableQuantity(
+        item.quantity,
+        alreadyReturnedByLineItem.get(item.id) ?? 0,
+      ),
+    };
+  });
+  const canReturnSomething =
+    sale.status === "PAID" && returnableLineItems.some((l) => l.returnableQuantity > 0);
 
   const customer = sale.customer as unknown as { full_name: string; phone: string | null } | null;
 
@@ -88,9 +127,25 @@ export default async function ReceiptPage({
               <span>Total</span>
               <span>{formatCents(sale.total_cents)}</span>
             </div>
+            {alreadyRefundedCents > 0 && (
+              <div className="flex justify-between text-destructive">
+                <span>Refunded</span>
+                <span>−{formatCents(alreadyRefundedCents)}</span>
+              </div>
+            )}
           </div>
 
-          <PrintButton />
+          <div className="space-y-2 print:hidden">
+            <PrintButton />
+            {canReturnSomething && (
+              <ReturnDialog
+                saleId={sale.id}
+                lineItems={returnableLineItems}
+                saleSubtotalCents={sale.subtotal_cents}
+                saleTaxCents={sale.tax_cents}
+              />
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>

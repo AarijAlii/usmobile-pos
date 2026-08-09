@@ -392,6 +392,52 @@ with check (
 );
 
 -- ---------------------------------------------------------------------------
+-- returns, return_line_items — append-only audit log (no update/delete
+-- policy => denied by default, matching stock_movements). Written only via
+-- the create_return() SECURITY INVOKER function in prisma/return_function.sql.
+-- ---------------------------------------------------------------------------
+
+alter table public.returns enable row level security;
+
+create policy "returns_select_scoped"
+on public.returns for select
+using (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+create policy "returns_insert_scoped"
+on public.returns for insert
+with check (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+alter table public.return_line_items enable row level security;
+
+create policy "return_line_items_select_scoped"
+on public.return_line_items for select
+using (
+  exists (
+    select 1 from public.returns r
+    where r.id = return_line_items.return_id
+      and r.organization_id = public.current_staff_org_id()
+      and public.can_access_store(r.store_id)
+  )
+);
+
+create policy "return_line_items_insert_scoped"
+on public.return_line_items for insert
+with check (
+  exists (
+    select 1 from public.returns r
+    where r.id = return_line_items.return_id
+      and r.organization_id = public.current_staff_org_id()
+      and public.can_access_store(r.store_id)
+  )
+);
+
+-- ---------------------------------------------------------------------------
 -- RLS proof (run manually against two seeded orgs to verify isolation):
 --
 --   1. Seed two organizations (Org A, Org B), each with a store and staff.
