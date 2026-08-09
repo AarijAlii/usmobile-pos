@@ -12,6 +12,7 @@ import {
   CalendarClock,
   LogOut,
   Menu,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -96,16 +97,21 @@ export function AppShell({
         </nav>
 
         <div className="border-t border-border/60 p-3">
-          <div className="flex items-center gap-3 rounded-xl px-3 py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
-              {staff.fullName.slice(0, 2).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{staff.fullName}</p>
-              <p className="truncate text-xs text-muted-foreground">
-                {storeName} · {staff.role.toLowerCase()}
-              </p>
-            </div>
+          <div className="flex items-center gap-1 rounded-xl">
+            <Link
+              href="/settings"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-secondary/60"
+            >
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
+                {staff.fullName.slice(0, 2).toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{staff.fullName}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {storeName} · {staff.role.toLowerCase()}
+                </p>
+              </div>
+            </Link>
             <form action={signOut}>
               <Button
                 type="submit"
@@ -144,6 +150,15 @@ export function AppShell({
               <nav className="space-y-1 px-3 py-2">
                 <NavLinks pathname={pathname} scope="mobile" />
               </nav>
+              <div className="border-t border-border/60 px-3 py-2">
+                <Link
+                  href="/settings"
+                  className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                >
+                  <Settings className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
+                  Settings
+                </Link>
+              </div>
             </SheetContent>
           </Sheet>
           <span className="text-[15px] font-semibold tracking-tight">
