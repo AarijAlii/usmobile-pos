@@ -411,6 +411,40 @@ async function main() {
     });
   }
 
+  // --- Layaway (one active example, partially paid) ------------------------
+  const existingLayaway = await prisma.layaway.findFirst({ where: { storeId: storeA.id } });
+  if (!existingLayaway) {
+    const pixel7Unit = await prisma.inventoryUnit.findUnique({ where: { imei: "356938035600005" } });
+    if (pixel7Unit) {
+      await prisma.$transaction(async (tx) => {
+        const subtotalCents = centsFor(499);
+        const taxCents = Math.round((subtotalCents * storeA.taxRateBps) / 10_000);
+        const layaway = await tx.layaway.create({
+          data: {
+            organizationId: orgA.id,
+            storeId: storeA.id,
+            customerId: kevin.id,
+            createdById: adminId,
+            inventoryUnitId: pixel7Unit.id,
+            subtotalCents,
+            taxCents,
+            totalCents: subtotalCents + taxCents,
+            paidCents: centsFor(150),
+            dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            status: "ACTIVE",
+          },
+        });
+        await tx.inventoryUnit.update({
+          where: { id: pixel7Unit.id },
+          data: { status: "RESERVED" },
+        });
+        await tx.layawayPayment.create({
+          data: { layawayId: layaway.id, amountCents: centsFor(150), status: "PAID" },
+        });
+      });
+    }
+  }
+
   console.log("Seed complete.");
   console.log("Demo logins (password: %s):", DEMO_PASSWORD);
   console.log("  Owner: owner@usmobile.demo");

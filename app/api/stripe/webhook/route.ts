@@ -32,7 +32,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (event.type === "checkout.session.completed") {
-    await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+    const session = event.data.object as Stripe.Checkout.Session;
+    if (session.metadata?.layawayPaymentId) {
+      await handleLayawayPaymentCompleted(session);
+    } else {
+      await handleCheckoutCompleted(session);
+    }
   }
 
   return NextResponse.json({ received: true });
@@ -100,4 +105,104 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         typeof session.payment_intent === "string" ? session.payment_intent : null,
     })
     .eq("id", saleId);
+}
+
+async function handleLayawayPaymentCompleted(session: Stripe.Checkout.Session) {
+  const paymentId = session.metadata?.layawayPaymentId;
+  if (!paymentId) return;
+
+  const supabase = createServiceRoleClient();
+
+  const { data: payment } = await supabase
+    .from("layaway_payments")
+    .select("id, status, amount_cents, layaway_id")
+    .eq("id", paymentId)
+    .single();
+
+  // Stripe may deliver the same event more than once — skip if already processed.
+  if (!payment || payment.status === "PAID") return;
+
+  await supabase
+    .from("layaway_payments")
+    .update({
+      status: "PAID",
+      stripe_payment_intent_id:
+        typeof session.payment_intent === "string" ? session.payment_intent : null,
+    })
+    .eq("id", paymentId);
+
+  const { data: layaway } = await supabase
+    .from("layaways")
+    .select(
+      "id, status, organization_id, store_id, customer_id, created_by_id, inventory_unit_id, subtotal_cents, tax_cents, total_cents, paid_cents",
+    )
+    .eq("id", payment.layaway_id)
+    .single();
+  if (!layaway) return;
+
+  const newPaidCents = layaway.paid_cents + payment.amount_cents;
+
+  if (newPaidCents < layaway.total_cents) {
+    await supabase.from("layaways").update({ paid_cents: newPaidCents }).eq("id", layaway.id);
+    return;
+  }
+
+  // Fully paid off — finalize: sell the reserved unit for real and record a
+  // normal Sale so it reports alongside every other sale.
+  const { data: unit } = await supabase
+    .from("inventory_units")
+    .select("id, product_id")
+    .eq("id", layaway.inventory_unit_id)
+    .single();
+
+  const { data: sale } = await supabase
+    .from("sales")
+    .insert({
+      organization_id: layaway.organization_id,
+      store_id: layaway.store_id,
+      customer_id: layaway.customer_id,
+      created_by_id: layaway.created_by_id,
+      status: "PAID",
+      subtotal_cents: layaway.subtotal_cents,
+      tax_cents: layaway.tax_cents,
+      total_cents: layaway.total_cents,
+    })
+    .select("id")
+    .single();
+
+  if (sale && unit) {
+    await supabase.from("sale_line_items").insert({
+      sale_id: sale.id,
+      product_id: unit.product_id,
+      inventory_unit_id: unit.id,
+      quantity: 1,
+      unit_price_cents: layaway.subtotal_cents,
+      line_total_cents: layaway.subtotal_cents,
+    });
+
+    await supabase.from("stock_movements").insert({
+      organization_id: layaway.organization_id,
+      store_id: layaway.store_id,
+      product_id: unit.product_id,
+      inventory_unit_id: unit.id,
+      reason: "SALE",
+      quantity_delta: -1,
+      reference_type: "layaway",
+      reference_id: layaway.id,
+    });
+  }
+
+  await supabase
+    .from("inventory_units")
+    .update({ status: "SOLD" })
+    .eq("id", layaway.inventory_unit_id);
+
+  await supabase
+    .from("layaways")
+    .update({
+      status: "PAID_OFF",
+      paid_cents: newPaidCents,
+      resulting_sale_id: sale?.id ?? null,
+    })
+    .eq("id", layaway.id);
 }

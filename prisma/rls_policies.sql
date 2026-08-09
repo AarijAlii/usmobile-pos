@@ -260,6 +260,63 @@ with check (
 );
 
 -- ---------------------------------------------------------------------------
+-- layaways, layaway_payments
+-- ---------------------------------------------------------------------------
+
+alter table public.layaways enable row level security;
+
+create policy "layaways_select_scoped"
+on public.layaways for select
+using (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+create policy "layaways_insert_scoped"
+on public.layaways for insert
+with check (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+);
+
+-- STAFF can update layaways they can access (record a payment), but only
+-- OWNER/ADMIN can cancel or forfeit one.
+create policy "layaways_update_scoped"
+on public.layaways for update
+using (
+  organization_id = public.current_staff_org_id()
+  and public.can_access_store(store_id)
+)
+with check (
+  organization_id = public.current_staff_org_id()
+  and (
+    status not in ('CANCELLED', 'FORFEITED')
+    or public.current_staff_role() in ('OWNER', 'ADMIN')
+  )
+);
+
+alter table public.layaway_payments enable row level security;
+
+create policy "layaway_payments_all_scoped"
+on public.layaway_payments for all
+using (
+  exists (
+    select 1 from public.layaways l
+    where l.id = layaway_payments.layaway_id
+      and l.organization_id = public.current_staff_org_id()
+      and public.can_access_store(l.store_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.layaways l
+    where l.id = layaway_payments.layaway_id
+      and l.organization_id = public.current_staff_org_id()
+      and public.can_access_store(l.store_id)
+  )
+);
+
+-- ---------------------------------------------------------------------------
 -- buyback_transactions
 -- ---------------------------------------------------------------------------
 

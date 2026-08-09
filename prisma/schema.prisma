@@ -7,6 +7,18 @@
 // prisma/migrations/*_rls_policies/migration.sql. Prisma Client connects with
 // a privileged connection that bypasses RLS, so it is never used to serve an
 // authenticated user request directly.
+//
+// updatedAt columns use @default(now()) instead of @updatedAt on purpose:
+// @updatedAt is Prisma-Client-side-only (it never becomes a DB default), and
+// since runtime writes bypass Prisma Client entirely, that default is load-
+// bearing for every INSERT. @default(now()) actually reaches the migration
+// SQL, so `prisma migrate dev` won't silently strip it on some later,
+// unrelated schema change — which is exactly what happened here once,
+// diagnosed via a null-constraint violation on a fresh INSERT. The
+// UPDATE-time refresh is handled by a trigger instead (see the
+// set_updated_at() function added in
+// prisma/migrations/20260808213055_add_updated_at_defaults_and_triggers),
+// which Prisma has no visibility into and therefore never touches.
 
 generator client {
   provider = "prisma-client-js"
@@ -53,6 +65,18 @@ enum BuybackStatus {
   CANCELLED
 }
 
+enum LayawayStatus {
+  ACTIVE
+  PAID_OFF
+  CANCELLED
+  FORFEITED
+}
+
+enum LayawayPaymentStatus {
+  AWAITING_PAYMENT
+  PAID
+}
+
 enum RepairStatus {
   INTAKE
   DIAGNOSING
@@ -80,7 +104,7 @@ model Organization {
   name      String
   slug      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
 
   stores         Store[]
   staff          Staff[]
@@ -88,6 +112,7 @@ model Organization {
   products       Product[]
   inventoryUnits InventoryUnit[]
   sales          Sale[]
+  layaways       Layaway[]
 
   @@map("organizations")
 }
@@ -100,13 +125,14 @@ model Store {
   timezone       String   @default("America/New_York")
   taxRateBps     Int      @default(0) @map("tax_rate_bps") // basis points, e.g. 725 = 7.25%
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
 
   organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   staff          Staff[]
   inventoryUnits InventoryUnit[]
   stockLevels    StockLevel[]
   sales          Sale[]
+  layaways       Layaway[]
   buybacks       BuybackTransaction[]
   repairTickets  RepairTicket[]
   stockMovements StockMovement[]
@@ -126,11 +152,12 @@ model Staff {
   role           StaffRole @default(STAFF)
   isActive       Boolean   @default(true) @map("is_active")
   createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  updatedAt      DateTime  @default(now()) @map("updated_at")
 
   organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   store           Store?               @relation(fields: [storeId], references: [id])
   salesCreated    Sale[]               @relation("SaleCreatedBy")
+  layawaysCreated Layaway[]            @relation("LayawayCreatedBy")
   buybacksCreated BuybackTransaction[] @relation("BuybackCreatedBy")
   repairsAssigned RepairTicket[]       @relation("RepairAssignedTo")
   stockMovements  StockMovement[]
@@ -147,10 +174,11 @@ model Customer {
   email          String?
   phone          String?
   createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
 
   organization  Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sales         Sale[]
+  layaways      Layaway[]
   buybacks      BuybackTransaction[]
   repairTickets RepairTicket[]
 
@@ -177,7 +205,7 @@ model Product {
   defaultPriceCents Int          @map("default_price_cents")
   isPart            Boolean      @default(false) @map("is_part") // usable as a repair part
   createdAt         DateTime     @default(now()) @map("created_at")
-  updatedAt         DateTime     @updatedAt @map("updated_at")
+  updatedAt         DateTime     @default(now()) @map("updated_at")
 
   organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   inventoryUnits  InventoryUnit[]
@@ -204,13 +232,14 @@ model InventoryUnit {
   askingPriceCents     Int?                @map("asking_price_cents")
   acquiredViaBuybackId String?             @unique @map("acquired_via_buyback_id")
   createdAt            DateTime            @default(now()) @map("created_at")
-  updatedAt            DateTime            @updatedAt @map("updated_at")
+  updatedAt            DateTime            @default(now()) @map("updated_at")
 
   organization  Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   store         Store               @relation(fields: [storeId], references: [id], onDelete: Cascade)
   product       Product             @relation(fields: [productId], references: [id])
   buybackSource BuybackTransaction? @relation(fields: [acquiredViaBuybackId], references: [id])
   saleLineItem  SaleLineItem?
+  layaway       Layaway?
 
   @@index([organizationId, storeId])
   @@index([storeId, status])
@@ -225,7 +254,7 @@ model StockLevel {
   productId      String   @map("product_id")
   quantityOnHand Int      @default(0) @map("quantity_on_hand")
   reorderLevel   Int      @default(0) @map("reorder_level")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  updatedAt      DateTime @default(now()) @map("updated_at")
 
   store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -252,13 +281,14 @@ model Sale {
   stripeCheckoutSessionId String?    @unique @map("stripe_checkout_session_id")
   stripePaymentIntentId   String?    @unique @map("stripe_payment_intent_id")
   createdAt               DateTime   @default(now()) @map("created_at")
-  updatedAt               DateTime   @updatedAt @map("updated_at")
+  updatedAt               DateTime   @default(now()) @map("updated_at")
 
   organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   store        Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   customer     Customer?      @relation(fields: [customerId], references: [id])
   createdBy    Staff          @relation("SaleCreatedBy", fields: [createdById], references: [id])
   lineItems    SaleLineItem[]
+  layaway      Layaway?
 
   @@index([organizationId, storeId])
   @@index([storeId, status])
@@ -283,6 +313,60 @@ model SaleLineItem {
 }
 
 // ---------------------------------------------------------------------------
+// Layaway (buy-now-hold-for-later on a specific serialized device)
+// ---------------------------------------------------------------------------
+
+/// A customer reserves one specific InventoryUnit with a deposit and pays
+/// off the rest over time. Store-issued credit against the store's own
+/// inventory — no third-party lender, so no consumer-lending compliance
+/// surface. Completing payoff produces a real Sale (see resultingSaleId)
+/// so it reports alongside every other sale.
+model Layaway {
+  id              String        @id @default(dbgenerated("gen_random_uuid()"))
+  organizationId  String        @map("organization_id")
+  storeId         String        @map("store_id")
+  customerId      String        @map("customer_id")
+  createdById     String        @map("created_by_id")
+  inventoryUnitId String        @unique @map("inventory_unit_id")
+  subtotalCents   Int           @map("subtotal_cents")
+  taxCents        Int           @map("tax_cents")
+  totalCents      Int           @map("total_cents")
+  paidCents       Int           @default(0) @map("paid_cents")
+  dueDate         DateTime      @map("due_date")
+  status          LayawayStatus @default(ACTIVE)
+  resultingSaleId String?       @unique @map("resulting_sale_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @default(now()) @map("updated_at")
+
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  store         Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  customer      Customer         @relation(fields: [customerId], references: [id])
+  createdBy     Staff            @relation("LayawayCreatedBy", fields: [createdById], references: [id])
+  inventoryUnit InventoryUnit    @relation(fields: [inventoryUnitId], references: [id])
+  resultingSale Sale?            @relation(fields: [resultingSaleId], references: [id])
+  payments      LayawayPayment[]
+
+  @@index([organizationId, storeId])
+  @@index([storeId, status])
+  @@map("layaways")
+}
+
+model LayawayPayment {
+  id                      String               @id @default(dbgenerated("gen_random_uuid()"))
+  layawayId               String               @map("layaway_id")
+  amountCents             Int                  @map("amount_cents")
+  status                  LayawayPaymentStatus @default(AWAITING_PAYMENT)
+  stripeCheckoutSessionId String?              @unique @map("stripe_checkout_session_id")
+  stripePaymentIntentId   String?              @unique @map("stripe_payment_intent_id")
+  createdAt               DateTime             @default(now()) @map("created_at")
+
+  layaway Layaway @relation(fields: [layawayId], references: [id], onDelete: Cascade)
+
+  @@index([layawayId])
+  @@map("layaway_payments")
+}
+
+// ---------------------------------------------------------------------------
 // Buy-back / trade-in
 // ---------------------------------------------------------------------------
 
@@ -299,7 +383,7 @@ model BuybackTransaction {
   payoutMethod      String        @default("cash") @map("payout_method") // "cash" | "store_credit" — label only
   status            BuybackStatus @default(COMPLETED)
   createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  updatedAt         DateTime      @default(now()) @map("updated_at")
 
   store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
   customer      Customer?      @relation(fields: [customerId], references: [id])
@@ -330,7 +414,7 @@ model RepairTicket {
   totalCents         Int          @default(0) @map("total_cents")
   customerNotifiedAt DateTime?    @map("customer_notified_at")
   createdAt          DateTime     @default(now()) @map("created_at")
-  updatedAt          DateTime     @updatedAt @map("updated_at")
+  updatedAt          DateTime     @default(now()) @map("updated_at")
 
   store      Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
   customer   Customer?        @relation(fields: [customerId], references: [id])

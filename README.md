@@ -1,6 +1,6 @@
 # USMobile POS
 
-A point-of-sale system for mobile phone stores in the USA — sell devices and accessories, buy back/trade in used phones, and track repair tickets from intake to pickup.
+A point-of-sale system for mobile phone stores in the USA — sell devices and accessories, buy back/trade in used phones, track repair tickets from intake to pickup, and hold a device on layaway with a deposit.
 
 Built for a take-home interview round. Scoped deliberately: the core POS loop (sell / buy-back / repair) is fully built and demoable end to end; wholesale, device leasing, and a full analytics suite (all part of the longer-term product vision) are explicitly out of scope for this round. See [Scope & tradeoffs](#scope--tradeoffs) below.
 
@@ -18,7 +18,7 @@ TypeScript · Next.js (App Router) · React · Supabase (Postgres + Auth + RLS) 
 | Secure backend APIs & business logic | Server Actions in each feature's `actions.ts`, `app/api/stripe/webhook`, `app/api/ai/diagnose` |
 | PostgreSQL design via Supabase | [`prisma/schema.prisma`](prisma/schema.prisma) |
 | Auth, authorization, RLS | Supabase Auth (`lib/supabase/*`), [`prisma/rls_policies.sql`](prisma/rls_policies.sql) |
-| Build features from requirements | Inventory, POS checkout, trade-in, repair tickets, dashboard |
+| Build features from requirements | Inventory, POS checkout, trade-in, repair tickets, layaway, dashboard |
 | Clean, maintainable, scalable code | Pure business logic extracted to `lib/*.ts` and unit-tested (see [Tests](#tests)) |
 | GitHub collaboration / code review | Feature-branch history (see commit log) |
 
@@ -54,6 +54,8 @@ Next.js (Vercel)                     Supabase                    External
 
 **Buy-back atomicity**: accepting a trade-in creates a `BuybackTransaction`, a new `InventoryUnit`, and a `StockMovement` together or not at all. This is done via a Postgres function (`prisma/buyback_function.sql`) rather than sequential app-side inserts, called through the RLS-scoped client — `SECURITY INVOKER` means RLS still applies to every insert inside it; the function only buys atomicity, not a privilege escalation.
 
+**Layaway**: a customer reserves one specific `InventoryUnit` with a deposit and pays off the rest over time — store-issued credit against the store's own inventory, not third-party lending, so there's no consumer-credit compliance surface to build against. Opening one is atomic the same way buy-back is (`prisma/layaway_function.sql`'s `create_layaway`, with a `for update` row lock so two staff can't reserve the same unit in a race). Each payment (deposit or installment) is a real Stripe Checkout Session; the webhook route branches on `session.metadata` to tell a layaway installment apart from a normal sale, and once the balance is fully paid, finalization (mark the unit `SOLD`, create a real `Sale` + `SaleLineItem` + `StockMovement`, link `Layaway.resultingSaleId`) happens with the same service-role client the sale webhook already uses. "Overdue" is computed at render time (`lib/layaway.ts`), not a stored status — there's no background job in this app, so staff act on it manually (collect a payment, or mark it forfeited) rather than it silently auto-expiring.
+
 ## Local setup
 
 1. **Install dependencies**
@@ -74,8 +76,9 @@ Next.js (Vercel)                     Supabase                    External
    Then, in the Supabase SQL editor (or by folding into a migration file), run the contents of:
    - [`prisma/rls_policies.sql`](prisma/rls_policies.sql)
    - [`prisma/buyback_function.sql`](prisma/buyback_function.sql)
+   - [`prisma/layaway_function.sql`](prisma/layaway_function.sql)
 
-5. **Seed demo data** (creates two demo organizations, staff logins, products, inventory, sales, buy-backs, and repair tickets):
+5. **Seed demo data** (creates two demo organizations, staff logins, products, inventory, sales, buy-backs, repair tickets, and one active layaway):
    ```bash
    npm run db:seed
    ```
@@ -114,7 +117,7 @@ Or via Docker Compose from the repo root: `docker compose up --build`.
 npm test
 ```
 
-19 unit tests covering the pure business-logic functions most likely to be checked for correctness: tax/total calculation (`lib/money.ts`), the repair-ticket status state machine (`lib/repair-status.ts`), and the inventory quantity guard used by both checkout and repair-parts consumption (`lib/inventory.ts`). These are plain Vitest unit tests on extracted pure functions rather than end-to-end tests — deliberate, given the time box (see tradeoffs below).
+24 unit tests covering the pure business-logic functions most likely to be checked for correctness: tax/total calculation (`lib/money.ts`), the repair-ticket status state machine (`lib/repair-status.ts`), the inventory quantity guard used by both checkout and repair-parts consumption (`lib/inventory.ts`), and layaway overdue/remaining-balance logic (`lib/layaway.ts`). These are plain Vitest unit tests on extracted pure functions rather than end-to-end tests — deliberate, given the time box (see tradeoffs below).
 
 ### Verifying RLS actually works
 
@@ -135,9 +138,11 @@ Within the core POS scope, specific simplifications:
 - **Customer notification is a manual "mark notified" timestamp**, not real SMS/email — avoids pulling in a messaging provider for a cosmetic requirement.
 - **One AI feature** (Groq-assisted repair diagnosis notes from the customer's reported issue) rather than several — chosen because it's the clearest, lowest-risk value-add for a repair tech's actual workflow; it's also non-blocking by design (an AI provider outage never blocks ticket creation or advancement).
 - **Cash payments and refunds are not implemented** — Stripe checkout is the only payment path in this build.
+- **Layaway overdue detection is computed at render time**, not a stored status with automatic expiry — there's no background job/cron in this app, so staff see "Overdue" as a derived flag and act on it manually (collect a payment, or mark it forfeited) rather than it silently transitioning on its own. (Layaway is also where `InventoryUnitStatus.RESERVED` actually gets used — regular POS checkout doesn't reserve stock at cart-add time, see above.)
 
 ## What I'd do with more time
 
+- A scheduled job (Vercel Cron) to auto-flag overdue layaways instead of computing it at render time, and to send a reminder before the due date.
 - Multi-store switcher UI and a `StaffStore` many-to-many table (currently simplified to a nullable `Staff.storeId`).
 - Inventory holds/reservations during an open cart to eliminate the checkout race above.
 - Real customer notifications (Twilio SMS or email) triggered on repair status changes.

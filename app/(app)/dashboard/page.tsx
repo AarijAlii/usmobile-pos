@@ -1,10 +1,11 @@
-import { DollarSign, Wrench, PackageSearch, Repeat } from "lucide-react";
+import { DollarSign, Wrench, PackageSearch, Repeat, CalendarClock } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/money";
 import { REPAIR_STATUS_LABELS, REPAIR_STATUS_BADGE_VARIANT } from "@/lib/repair-status";
+import { isLayawayOverdue } from "@/lib/layaway";
 import { requireCurrentStaff, getActiveStoreId } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -16,7 +17,7 @@ export default async function DashboardPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [salesToday, openRepairs, lowStock, buybacksToday] = await Promise.all([
+  const [salesToday, openRepairs, lowStock, buybacksToday, activeLayaways] = await Promise.all([
     supabase
       .from("sales")
       .select("total_cents")
@@ -41,6 +42,11 @@ export default async function DashboardPage() {
       .select("offer_price_cents")
       .eq("store_id", storeId)
       .gte("created_at", todayStart.toISOString()),
+    supabase
+      .from("layaways")
+      .select("due_date, status")
+      .eq("store_id", storeId)
+      .eq("status", "ACTIVE"),
   ]);
 
   const salesTotalCents = (salesToday.data ?? []).reduce(
@@ -54,6 +60,9 @@ export default async function DashboardPage() {
   const lowStockItems = (lowStock.data ?? []).filter(
     (item) => item.quantity_on_hand <= item.reorder_level,
   );
+  const overdueLayawaysCount = (activeLayaways.data ?? []).filter((l) =>
+    isLayawayOverdue("ACTIVE", l.due_date),
+  ).length;
 
   return (
     <div>
@@ -62,7 +71,7 @@ export default async function DashboardPage() {
         description="Today's snapshot across sales, repairs, and inventory."
       />
 
-      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-4 md:p-8">
+      <div className="grid grid-cols-1 gap-4 p-6 sm:grid-cols-2 lg:grid-cols-5 md:p-8">
         <StatCard
           label="Today's sales"
           value={formatCents(salesTotalCents)}
@@ -86,6 +95,12 @@ export default async function DashboardPage() {
           value={formatCents(buybackTotalCents)}
           subtext={`${buybacksToday.data?.length ?? 0} trade-ins`}
           icon={Repeat}
+        />
+        <StatCard
+          label="Active layaways"
+          value={String(activeLayaways.data?.length ?? 0)}
+          subtext={overdueLayawaysCount > 0 ? `${overdueLayawaysCount} overdue` : "None overdue"}
+          icon={CalendarClock}
         />
       </div>
 

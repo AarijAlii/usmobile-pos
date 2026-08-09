@@ -8,6 +8,7 @@ import {
   Package,
   Repeat,
   Wrench,
+  CalendarClock,
   LogOut,
   Menu,
 } from "lucide-react";
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pos", label: "Point of Sale", icon: ShoppingCart },
   { href: "/inventory", label: "Inventory", icon: Package },
+  { href: "/layaway", label: "Layaway", icon: CalendarClock },
   { href: "/trade-in", label: "Trade-In", icon: Repeat },
   { href: "/repairs", label: "Repairs", icon: Wrench },
 ];
